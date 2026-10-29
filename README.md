@@ -33,6 +33,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
 npm start
 ```
 
+Speech recognition runs locally with Whisper (faster-whisper, CPU, int8). `setup-windows.ps1` installs it into `%LOCALAPPDATA%\AgentCall` (Python venv + ~0.5 GB model, once). If Whisper is missing AgentCall falls back to Windows dictation and then to System.Speech. Engine override: `AGENTCALL_STT_ENGINE=whisper|winrt|classic`; model: `AGENTCALL_WHISPER_MODEL` (default `small`); extra vocabulary: `AGENTCALL_STT_VOCAB`.
+
 Then use the helper to start Claude with AgentCall:
 
 ```powershell

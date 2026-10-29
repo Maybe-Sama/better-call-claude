@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
 Write-Host ""
@@ -39,6 +39,9 @@ try {
     }
 
     Write-Host ""
+    Write-Host "Instalando Whisper local (reconocimiento de voz offline)…" -ForegroundColor Yellow
+    & "$PSScriptRoot\setup-whisper.ps1"
+
     Write-Host "Comprobando reconocimiento de voz de Windows…" -ForegroundColor Yellow
     & "$PSScriptRoot\check-speech.ps1"
 
