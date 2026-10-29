@@ -81,11 +81,13 @@ class Speaker:
         self.speed = speed
         self.lang = lang
         self.lock = threading.Lock()
+        self.model_lock = threading.Lock()
         self.current = None
         self.acks = []
 
     def synth(self, text):
-        samples, sr = self.k.create(text, voice=self.voice, speed=self.speed, lang=self.lang)
+        with self.model_lock:  # an interrupted utterance may still be inside create(); never run two at once
+            samples, sr = self.k.create(text, voice=self.voice, speed=self.speed, lang=self.lang)
         samples = np.asarray(samples, dtype=np.float32)
         if sr != self.SAMPLE_RATE:
             n = int(round(len(samples) * self.SAMPLE_RATE / sr))

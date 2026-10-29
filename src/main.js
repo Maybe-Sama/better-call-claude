@@ -26,10 +26,17 @@ try {
 } catch { /* no config file: defaults */ }
 
 const HOST = '127.0.0.1';
-const PORT = Number(process.env.AGENTCALL_PORT || 32147);
-const MIN_RESULT_MS = process.env.AGENTCALL_MIN_RESULT_SECONDS != null
-  ? Number(process.env.AGENTCALL_MIN_RESULT_SECONDS) * 1000
-  : MIN_RESULT_TURN_MS;
+// Numeric settings come from env/config.json: anything invalid falls back to the default.
+function numberSetting(name, fallback, min, max) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const value = Number(raw);
+  if (Number.isFinite(value) && value >= min && value <= max) return value;
+  console.error(`[AgentCall] Ignoro ${name}=${raw}: debe ser un número entre ${min} y ${max}.`);
+  return fallback;
+}
+const PORT = numberSetting('AGENTCALL_PORT', 32147, 1024, 65535);
+const MIN_RESULT_MS = numberSetting('AGENTCALL_MIN_RESULT_SECONDS', MIN_RESULT_TURN_MS / 1000, 0, 3600) * 1000;
 const VERSION = require('../package.json').version;
 
 const broker = new CallBroker({ minResultMs: MIN_RESULT_MS, readTitle: readSessionTitle });

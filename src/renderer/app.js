@@ -104,7 +104,16 @@ function renderIncoming(call) {
     if (open) menu.querySelector('button')?.focus();
   };
   snoozeBtn.onclick = () => setMenu(menu.classList.contains('hidden'));
-  menu.onkeydown = (e) => { if (e.key === 'Escape') { setMenu(false); snoozeBtn.focus(); } };
+  menu.onkeydown = (e) => {
+    const items = [...menu.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    const go = (n) => { e.preventDefault(); items[(n + items.length) % items.length].focus(); };
+    if (e.key === 'Escape') { setMenu(false); snoozeBtn.focus(); }
+    else if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(items.length - 1);
+  };
   menu.querySelectorAll('[data-snooze]').forEach(btn => {
     btn.onclick = async () => { stopRing(); await window.agentCall.snooze(call.id, Number(btn.dataset.snooze)); };
   });
@@ -334,9 +343,8 @@ function speak(text) {
   if (ttsEngine === 'kokoro') {
     const id = `u${++uttCounter}`;
     playback = { id, sources: [], nextTime: 0, done: false };
-    window.agentCall.ttsSpeak(id, spoken).then(ok => {
-      if (!ok && playback.id === id) { playback.id = null; ttsEngine = 'browser'; speakWithBrowser(spoken); }
-    });
+    const fallback = () => { if (playback.id === id) { playback = { id: null, sources: [], nextTime: 0, done: false }; speakWithBrowser(spoken); } };
+    window.agentCall.ttsSpeak(id, spoken).then(ok => { if (!ok) { ttsEngine = 'browser'; fallback(); } }).catch(fallback);
     return;
   }
   speakWithBrowser(spoken);
@@ -450,7 +458,16 @@ window.agentCall.onTts(data => {
     ttsEngine = 'browser';
     if (playback.id && !playback.ack) { const text = lastSpokenText; playback = { id: null, sources: [], nextTime: 0, done: false }; speakWithBrowser(text); }
   } else if (data.type === 'audio') playAudioChunk(data);
-  else if (data.type === 'done' && data.id === playback.id) { playback.done = true; maybeFinishPlayback(); }
+  else if (data.type === 'done' && data.id === playback.id) {
+    if (!data.chunks && !data.interrupted && !playback.ack) {
+      // The voice engine produced nothing (network/model error): say it with the Windows voice instead.
+      playback = { id: null, sources: [], nextTime: 0, done: false };
+      speakWithBrowser(lastSpokenText);
+      return;
+    }
+    playback.done = true;
+    maybeFinishPlayback();
+  }
 });
 window.agentCall.getTtsEngine().then(engine => { if (engine) ttsEngine = engine; });
 
@@ -663,6 +680,7 @@ window.agentCall.onState(next => {
   const previousActive = state.activeId;
   state = next;
   if (previousActive !== state.activeId) {
+    resetCallClock();
     clearVoiceDraft();
     if (!state.activeId) stopSpeech();
   }

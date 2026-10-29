@@ -33,8 +33,16 @@ MIN_UTTERANCE_S = 0.35
 MAX_UTTERANCE_S = 25.0
 # Close-talk gate: software gain applied to the microphone and the minimum level (RMS after gain) a
 # frame needs to count as speech. Raise the threshold to ignore room noise and distant voices.
-MIC_GAIN = float(os.environ.get("AGENTCALL_MIC_GAIN", "1.0"))
-SPEECH_THRESHOLD = float(os.environ.get("AGENTCALL_SPEECH_THRESHOLD", "0.006"))
+def _env_float(name, default, low, high):
+    try:
+        value = float(os.environ.get(name, default))
+        return value if low <= value <= high else default
+    except ValueError:
+        return default
+
+
+MIC_GAIN = _env_float("AGENTCALL_MIC_GAIN", 1.0, 0.05, 10.0)
+SPEECH_THRESHOLD = _env_float("AGENTCALL_SPEECH_THRESHOLD", 0.006, 0.0, 0.5)
 
 # Text Whisper is known to invent on silence/noise in Spanish.
 HALLUCINATIONS = re.compile(
@@ -328,10 +336,17 @@ def run_mic(segmenter, mic=""):
             if was_listening and not listening.is_set():
                 segmenter.cancel()  # paused: drop the utterance and anything still being transcribed
                 pending = np.zeros(0, dtype=np.float32)
+                while not frames.empty():  # audio captured just before the pause belongs to no one
+                    try:
+                        frames.get_nowait()
+                    except queue.Empty:
+                        break
             was_listening = listening.is_set()
             try:
                 chunk = frames.get(timeout=0.2)
             except queue.Empty:
+                continue
+            if not listening.is_set():
                 continue
             if device_rate != SAMPLE_RATE:
                 n = int(round(len(chunk) * SAMPLE_RATE / device_rate))
