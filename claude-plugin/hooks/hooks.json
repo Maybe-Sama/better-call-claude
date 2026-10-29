@@ -1,10 +1,78 @@
 {
+  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Every hook fails open when AgentCall is not running.",
   "hooks": {
-    "SessionStart": [{"hooks": [{"type": "command","command": "powershell.exe","args": ["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File","${CLAUDE_PLUGIN_ROOT}/hooks/session-start.ps1"],"timeout": 5}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/user-prompt-submit","timeout": 2,"onFailure": "continue"}]}],
-    "PreToolUse": [{"matcher": "AskUserQuestion","hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/ask-user","timeout": 86400,"statusMessage": "Esperando tu respuesta en AgentCall…","onFailure": "continue"}]}],
-    "PermissionRequest": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/permission","timeout": 86400,"statusMessage": "Esperando tu permiso en AgentCall…","onFailure": "continue"}]}],
-    "Stop": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/stop","timeout": 86400,"statusMessage": "AgentCall está entregando el resultado…","onFailure": "continue"}]}],
-    "StopFailure": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/stop-failure","timeout": 3,"onFailure": "continue"}]}]
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.ps1"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "http", "url": "http://127.0.0.1:32147/hooks/user-prompt-submit", "timeout": 3, "onFailure": "continue" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:32147/hooks/ask-user",
+            "timeout": 86400,
+            "statusMessage": "AgentCall: te está llamando con esta pregunta (escribe aquí si prefieres seguir en la terminal)",
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:32147/hooks/permission",
+            "timeout": 86400,
+            "statusMessage": "AgentCall: te está llamando para pedir permiso",
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "http", "url": "http://127.0.0.1:32147/hooks/post-tool-use", "timeout": 2, "onFailure": "continue" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:32147/hooks/stop",
+            "timeout": 86400,
+            "statusMessage": "AgentCall: llamada de resultado en curso (escribe aquí para seguir en la terminal)",
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          { "type": "http", "url": "http://127.0.0.1:32147/hooks/stop-failure", "timeout": 3, "onFailure": "continue" }
+        ]
+      }
+    ]
   }
 }
