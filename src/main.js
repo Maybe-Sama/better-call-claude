@@ -321,7 +321,11 @@ const STT_CULTURE = process.env.AGENTCALL_STT_CULTURE || 'es-ES';
 const STT_ENGINE = (process.env.AGENTCALL_STT_ENGINE || 'auto').toLowerCase();
 const AGENTCALL_DATA = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'AgentCall');
 const WHISPER_PYTHON = path.join(AGENTCALL_DATA, 'whisper-venv', 'Scripts', 'python.exe');
-let whisperUnavailable = !['auto', 'whisper'].includes(STT_ENGINE) || !fs.existsSync(WHISPER_PYTHON);
+// Optional GPU backend (scripts/setup-whisper-gpu.ps1): large-v3-turbo through DirectML in its own venv.
+const GPU_PYTHON = path.join(AGENTCALL_DATA, 'gpu-venv', 'Scripts', 'python.exe');
+const GPU_MODEL = path.join(AGENTCALL_DATA, 'models', 'whisper-turbo-onnx', 'onnx', 'encoder_model_fp16.onnx');
+let whisperGpu = (process.env.AGENTCALL_WHISPER_BACKEND || 'cpu') === 'dml' && fs.existsSync(GPU_PYTHON) && fs.existsSync(GPU_MODEL);
+let whisperUnavailable = !['auto', 'whisper'].includes(STT_ENGINE) || !(fs.existsSync(WHISPER_PYTHON) || whisperGpu);
 let winrtExe = null;
 let winrtUnavailable = !['auto', 'winrt'].includes(STT_ENGINE);
 
@@ -360,8 +364,9 @@ class SttManager {
     const useWinRt = !useWhisper && !winrtUnavailable && winrtExe;
     let child;
     if (useWhisper) {
-      child = spawn(WHISPER_PYTHON, ['-u', path.join(__dirname, 'speech', 'whisper_worker.py'),
-        '--language', STT_CULTURE.split('-')[0], '--models-dir', path.join(AGENTCALL_DATA, 'models')],
+      child = spawn(whisperGpu ? GPU_PYTHON : WHISPER_PYTHON, ['-u', path.join(__dirname, 'speech', 'whisper_worker.py'),
+        '--language', STT_CULTURE.split('-')[0], '--models-dir', path.join(AGENTCALL_DATA, 'models'),
+        '--backend', whisperGpu ? 'dml' : 'cpu'],
         { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
     } else if (useWinRt) {
       child = spawn(winrtExe, [STT_CULTURE], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -416,6 +421,21 @@ class SttManager {
     const fatal = event.type === 'error' && this.child === child && event.fatal &&
       ['whisper', 'winrt'].includes(event.engine) && STT_ENGINE !== event.engine;
     if (event.type === 'ready' && this.child === child) this.ready = true;
+    // The GPU backend failing first falls back to Whisper on the CPU before trying other engines.
+    if (event.type === 'error' && event.fatal && event.engine === 'whisper' && whisperGpu && this.child === child && !this.ready) {
+      log(`STT: Whisper en GPU no ha arrancado (${event.message}); uso la CPU.`);
+      whisperGpu = false;
+      const wasListening = this.listening;
+      child.agentcallReplaced = true;
+      child.agentcallStopping = true;
+      this.child = null;
+      try { child.stdin.end(); } catch {}
+      try { child.kill(); } catch {}
+      if (!fs.existsSync(WHISPER_PYTHON)) whisperUnavailable = true;
+      this.ensure();
+      if (wasListening) this.setListening(true);
+      return;
+    }
     if (fatal) {
       if (event.engine === 'whisper') whisperUnavailable = true;
       if (event.engine === 'winrt') winrtUnavailable = true;
