@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data:; connect-src 'self' http://127.0.0.1:*;" />
+  <title>AgentCall</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="titlebar">
+      <div class="brand"><span class="brand-dot"></span><span>AgentCall</span></div>
+      <div class="title-actions">
+        <button id="dndBtn" class="icon-btn dnd-btn" title="No molestar">DND</button>
+        <button id="minBtn" class="icon-btn" title="Minimizar">—</button>
+        <button id="closeBtn" class="icon-btn" title="Ocultar">×</button>
+      </div>
+    </header>
+    <div id="serviceBanner" class="banner hidden"></div>
+    <main id="main"></main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
