@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command","command": "powershell.exe","args": ["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File","${CLAUDE_PLUGIN_ROOT}/hooks/session-start.ps1"],"timeout": 5}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/user-prompt-submit","timeout": 2,"onFailure": "continue"}]}],
+    "PreToolUse": [{"matcher": "AskUserQuestion","hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/ask-user","timeout": 86400,"statusMessage": "Esperando tu respuesta en AgentCall…","onFailure": "continue"}]}],
+    "PermissionRequest": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/permission","timeout": 86400,"statusMessage": "Esperando tu permiso en AgentCall…","onFailure": "continue"}]}],
+    "Stop": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/stop","timeout": 86400,"statusMessage": "AgentCall está entregando el resultado…","onFailure": "continue"}]}],
+    "StopFailure": [{"hooks": [{"type": "http","url": "http://127.0.0.1:32147/hooks/stop-failure","timeout": 3,"onFailure": "continue"}]}]
+  }
+}
