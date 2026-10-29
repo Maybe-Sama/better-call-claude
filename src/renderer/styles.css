@@ -119,3 +119,18 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .countdown-hint { margin-top: 5px; font-size: 10px; color: var(--muted); }
 @keyframes countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .countdown span { animation: none; transform: scaleX(.5); } }
+
+.rate-btn { flex: 0 0 auto; border: 1px solid var(--line); background: var(--panel-2); color: #cfd6e2; border-radius: 99px; padding: 5px 9px; font-size: 10px; font-weight: 750; cursor: pointer; font-variant-numeric: tabular-nums; }
+.rate-btn:hover { background: #1c2330; color: var(--text); }
+.quick-answers { margin: 0 15px 10px; display: flex; flex-wrap: wrap; gap: 6px; max-height: 168px; overflow-y: auto; }
+.quick-btn { border: 1px solid var(--line); background: var(--panel-2); color: #e3e8f0; border-radius: 11px; padding: 9px 11px; font-size: 12px; font-weight: 650; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; text-align: left; }
+.quick-btn:hover { background: #1d2431; border-color: rgba(255,255,255,.14); }
+.quick-btn.option { flex: 1 1 calc(50% - 6px); min-width: 0; }
+.quick-btn.picked { border-color: rgba(114,224,166,.55); background: rgba(114,224,166,.12); }
+.quick-letter { flex: 0 0 auto; width: 19px; height: 19px; border-radius: 6px; display: grid; place-items: center; font-size: 10px; font-weight: 850; color: var(--green); background: rgba(114,224,166,.1); }
+.quick-label { min-width: 0; overflow-wrap: anywhere; }
+.quick-btn.yes { flex: 1 1 0; justify-content: center; background: var(--green); color: #07110c; border-color: transparent; }
+.quick-btn.no { flex: 1 1 0; justify-content: center; color: #ffadb4; border-color: rgba(255,127,137,.25); background: rgba(255,127,137,.08); }
+.quick-btn.send { flex: 1 1 100%; justify-content: center; color: var(--green); border-color: rgba(114,224,166,.35); }
+.quick-btn:disabled { opacity: .45; cursor: default; }
+.quick-btn:focus-visible, .rate-btn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }

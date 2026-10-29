@@ -47,7 +47,7 @@ SPEECH_THRESHOLD = _env_float("AGENTCALL_SPEECH_THRESHOLD", 0.006, 0.0, 0.5)
 # Text Whisper is known to invent on silence/noise in Spanish.
 HALLUCINATIONS = re.compile(
     r"amara\.org|subt[ií]tulos|suscr[ií]bete|gracias por ver|gracias por su atenci[oó]n|"
-    r"m[aá]s informaci[oó]n en|www\.|^\W*$",
+    r"m[aá]s informaci[oó]n en|www\.|^\W*$|^\W*gracias\W*$",
     re.IGNORECASE,
 )
 

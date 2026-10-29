@@ -336,3 +336,28 @@ test('choice matcher handles typical Claude labels: keywords, letters and "la re
   assert.equal(matchQuestionAnswer(q, 'la tercera'), 'Clerk');
   assert.equal(matchQuestionAnswer(q, 'Clerk o NextAuth, no sé'), null);
 });
+
+test('quick-answer buttons: option labels, multi-select and Sí/No on permissions', () => {
+  const qs = [
+    { question: 'Q1', header: 'Login', options: [{ label: 'Supabase Auth (Recomendado)' }, { label: 'NextAuth' }, { label: 'Clerk' }] },
+    { question: 'Q2', header: 'Métodos', multiSelect: true, options: [{ label: 'Email y contraseña' }, { label: 'Google' }, { label: 'Enlace mágico' }] },
+  ];
+  const broker = new CallBroker();
+  let response;
+  const call = broker.receiveAskUser(askPayload('btn', qs), b => { response = b; });
+  broker.answer(call.id);
+  assert.deepEqual(broker.getSnapshot().calls[0].currentQuestion.options.map(o => o.label), ['Supabase Auth (Recomendado)', 'NextAuth', 'Clerk']);
+  assert.equal(broker.submitChoice(call.id, 'No existe').ok, false);
+  assert.equal(broker.submitChoice(call.id, 'NextAuth').nextQuestion, true);
+  assert.equal(broker.getSnapshot().calls[0].currentQuestion.multiSelect, true);
+  broker.submitChoice(call.id, ['Google', 'Enlace mágico']);
+  assert.deepEqual(response.hookSpecificOutput.updatedInput.answers, { Q1: 'NextAuth', Q2: 'Google, Enlace mágico' });
+  assert.equal(broker.getSnapshot().calls[0].currentQuestion, null);
+
+  let permission;
+  const p = broker.receivePermission(permissionPayload('btn2'), b => { permission = b; });
+  broker.hangup(call.id);
+  broker.answer(p.id);
+  broker.submitChoice(p.id, 'allow');
+  assert.equal(permission.hookSpecificOutput.decision.behavior, 'allow');
+});

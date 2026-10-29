@@ -609,6 +609,7 @@ function registerIpc() {
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
   ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); return broker.hangup(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });
+  ipcMain.handle('agentcall:submit-choice', (_e, { id, choice }) => { log(`UI: botón ${Array.isArray(choice) ? choice.join(' + ') : choice}`); return broker.submitChoice(id, choice); });
   ipcMain.handle('agentcall:submit-text', (_e, { id, text }) => { log(`UI: respuesta (${String(text).length} caracteres)`); return broker.submitUserText(id, text); });
   ipcMain.handle('agentcall:set-muted', (_e, value) => { log(`UI: micrófono ${value ? 'silenciado' : 'activo'}`); muted = Boolean(value); reconcileStt(); return muted; });
   ipcMain.handle('agentcall:set-tts', (_e, value) => { ttsSpeaking = Boolean(value); reconcileStt(); return ttsSpeaking; });

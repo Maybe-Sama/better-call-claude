@@ -362,36 +362,60 @@ class CallBroker extends EventEmitter {
       const clarification = isClarification(text);
       const matched = clarification ? null : matchQuestionAnswer(current, text);
       // Like the terminal's "Other" field: an unmatched answer is passed verbatim, never forced into an option.
-      if (current?.question) call.answers[current.question] = matched || text;
-      call.questionIndex += 1;
-
-      if (!clarification && call.questionIndex < questions.length) {
-        const next = questions[call.questionIndex];
-        const message = { role: 'assistant', text: questionText(next), speech: questionSpeech(next), at: this.now(), kind: 'question' };
-        call.messages.push(message);
-        call.detail = next.header || call.detail;
-        this._changed('message', { id, message });
-        return { ok: true, resolved: false, nextQuestion: true, matched };
-      }
-
-      for (const q of questions) {
-        if (q?.question && !(q.question in call.answers)) {
-          call.answers[q.question] = '(sin responder: el usuario ha hecho antes una pregunta o aclaración)';
-        }
-      }
-      this._resolve(call, {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'allow',
-          permissionDecisionReason: 'Respuesta recogida por AgentCall.',
-          updatedInput: { ...call.toolInput, answers: { ...call.answers } },
-        },
-      });
-      return { ok: true, resolved: true, matched, clarification };
+      return this._answerQuestion(call, matched || text, { matched, clarification });
     }
 
     this._changed();
     return { ok: true };
+  }
+
+  // Quick-answer buttons: the user clicked option label(s) of the current question, or Sí/No on a permission.
+  submitChoice(id, choice) {
+    const call = this.calls.get(id);
+    if (!call || call.status !== 'active' || !call.responder || call.resolved) return { ok: false, error: 'Claude ya no espera esta respuesta.' };
+    if (call.interactionKind === 'permission') {
+      return this.submitUserText(id, choice === 'allow' ? 'Sí' : 'No');
+    }
+    if (call.interactionKind !== 'ask') return { ok: false, error: 'Esta llamada no tiene opciones.' };
+    const current = (call.questions || [])[call.questionIndex];
+    const labels = (Array.isArray(choice) ? choice : [choice]).filter(l => current?.options?.some(o => o.label === l));
+    if (!current || !labels.length) return { ok: false, error: 'Opción no válida.' };
+    const answer = current.multiSelect ? labels.join(', ') : labels[0];
+    call.messages.push({ role: 'user', text: answer, at: this.now(), kind: 'answer' });
+    call.updatedAt = this.now();
+    return this._answerQuestion(call, answer, { matched: answer, clarification: false });
+  }
+
+  _answerQuestion(call, answer, { matched, clarification }) {
+    const id = call.id;
+    const questions = call.questions || [];
+    const current = questions[call.questionIndex] || questions[0];
+    if (current?.question) call.answers[current.question] = answer;
+    call.questionIndex += 1;
+
+    if (!clarification && call.questionIndex < questions.length) {
+      const next = questions[call.questionIndex];
+      const message = { role: 'assistant', text: questionText(next), speech: questionSpeech(next), at: this.now(), kind: 'question' };
+      call.messages.push(message);
+      call.detail = next.header || call.detail;
+      this._changed('message', { id, message });
+      return { ok: true, resolved: false, nextQuestion: true, matched };
+    }
+
+    for (const q of questions) {
+      if (q?.question && !(q.question in call.answers)) {
+        call.answers[q.question] = '(sin responder: el usuario ha hecho antes una pregunta o aclaración)';
+      }
+    }
+    this._resolve(call, {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        permissionDecisionReason: 'Respuesta recogida por AgentCall.',
+        updatedInput: { ...call.toolInput, answers: { ...call.answers } },
+      },
+    });
+    return { ok: true, resolved: true, matched, clarification };
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -612,6 +636,10 @@ class CallBroker extends EventEmitter {
       updatedAt: call.updatedAt,
       questionIndex: call.questionIndex || 0,
       questionCount: call.questions?.length || 0,
+      // Current question (for quick-answer buttons) while Claude is still waiting for it.
+      currentQuestion: call.interactionKind === 'ask' && call.responder && !call.resolved
+        ? (({ question, header, multiSelect, options }) => ({ question, header, multiSelect: Boolean(multiSelect), options: (options || []).map(o => ({ label: o.label, description: o.description || '' })) }))(call.questions[call.questionIndex] || {})
+        : null,
       messages: call.messages || [],
     };
   }

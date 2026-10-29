@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('agentCall', {
   snooze: (id, minutes) => ipcRenderer.invoke('agentcall:snooze', { id, minutes }),
   hangup: (id) => ipcRenderer.invoke('agentcall:hangup', id),
   setDnd: (value) => ipcRenderer.invoke('agentcall:set-dnd', value),
+  submitChoice: (id, choice) => ipcRenderer.invoke('agentcall:submit-choice', { id, choice }),
   submitText: (id, text) => ipcRenderer.invoke('agentcall:submit-text', { id, text }),
   setMuted: (value) => ipcRenderer.invoke('agentcall:set-muted', value),
   setTts: (value) => ipcRenderer.invoke('agentcall:set-tts', value),

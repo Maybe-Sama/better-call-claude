@@ -15,10 +15,10 @@ const MIN_VISIBLE_COUNTDOWN_MS = 1200;
 // When the last words announce more ("y…", "pero…", "quiero añadir…"), the user is thinking, not done.
 const VOICE_SUBMIT_DELAY_THINKING_MS = 5000;
 const THINKING_TAIL = /(\b(y|o|e|u|pero|que|porque|entonces|adem[aá]s|tambi[eé]n|aparte|eh|em|mm|bueno|pues|a ver|o sea|es decir|como|tipo|luego|despu[eé]s|a[nñ]adir|decir|comentar|otra cosa)|\.\.\.|…|,)\s*[.,…]*\s*$/i;
-// Below this, Windows recognitions are noise/echo guesses ("Orlando", 0.11) and are dropped.
-const MIN_STT_CONFIDENCE = 0.3;
-// How long after Claude stops speaking its voice may still echo back into the microphone.
-const ECHO_TAIL_MS = 1500;
+// Below this, recognitions are noise/echo guesses ("Orlando" 0.11, Whisper's "Gracias." 0.35) and are dropped.
+const MIN_STT_CONFIDENCE = 0.4;
+// How long after Claude stops speaking a recognition may still be its echo (Whisper delivers ~1 s late).
+const ECHO_TAIL_MS = 4000;
 
 let state = { calls: [], activeId: null, dnd: false, snoozeOptions: [] };
 let muted = false;
@@ -144,10 +144,12 @@ function renderActive(call) {
     <div class="call-head">
       <div class="avatar" aria-hidden="true">C</div>
       <div class="head-copy"><div class="head-title">${esc(call.title)}</div><div class="head-context">${esc(call.context)}</div></div>
+      <button id="rateBtn" class="rate-btn" title="Velocidad de la voz de Claude (clic para cambiar)" aria-label="Velocidad de la voz">${formatRate(voiceRate)}</button>
       <div class="status-pill ${call.awaitingClaude ? 'working' : ''}"><span id="callClock">00:00</span></div>
     </div>
     ${queued ? `<div class="queue-strip">☎ ${queued} ${queued === 1 ? 'llamada esperando' : 'llamadas esperando'} en cola</div>` : ''}
     <div class="transcript" id="transcript" aria-live="polite">${call.messages.map(messageHtml).join('')}</div>
+    ${quickAnswersHtml(call)}
     <div class="live-caption" id="liveCaption">${liveCaptionHtml(call)}</div>
     <div class="call-controls">
       <div class="input-row">
@@ -167,6 +169,8 @@ function renderActive(call) {
   updateLevel();
   if (!clockTimer) clockTimer = setInterval(updateClock, 1000);
 
+  bindQuickAnswers(call);
+  document.getElementById('rateBtn').onclick = () => setVoiceRate(VOICE_RATES[(VOICE_RATES.indexOf(voiceRate) + 1) % VOICE_RATES.length]);
   document.getElementById('muteBtn').onclick = async () => { muted = !muted; await window.agentCall.setMuted(muted); render(); };
   document.getElementById('hangupBtn').onclick = async () => {
     stopSpeech();
@@ -332,7 +336,7 @@ function setTts(value) {
 // available, Chromium's Windows voices are used instead.
 let ttsEngine = 'browser';
 let uttCounter = 0;
-let playback = { id: null, sources: [], nextTime: 0, done: false };
+let playback = { id: null, queue: [], current: null, done: false };
 
 function speak(text) {
   stopSpeech();
@@ -342,8 +346,8 @@ function speak(text) {
   lastSpokenText = spoken;
   if (ttsEngine === 'kokoro') {
     const id = `u${++uttCounter}`;
-    playback = { id, sources: [], nextTime: 0, done: false };
-    const fallback = () => { if (playback.id === id) { playback = { id: null, sources: [], nextTime: 0, done: false }; speakWithBrowser(spoken); } };
+    playback = emptyPlayback({ id });
+    const fallback = () => { if (playback.id === id) { playback = emptyPlayback(); speakWithBrowser(spoken); } };
     window.agentCall.ttsSpeak(id, spoken).then(ok => { if (!ok) { ttsEngine = 'browser'; fallback(); } }).catch(fallback);
     return;
   }
@@ -356,7 +360,7 @@ function speakWithBrowser(spoken) {
   if (!spanishVoice) pickSpanishVoice();
   if (spanishVoice) utterance.voice = spanishVoice;
   utterance.lang = spanishVoice?.lang || 'es-ES';
-  utterance.rate = 1.08;
+  utterance.rate = 1.08 * voiceRate;
   const finish = () => {
     if (currentUtterance !== utterance) return;
     currentUtterance = null;
@@ -375,65 +379,76 @@ function speechFinished() {
   if (finalVoiceParts.length) scheduleVoiceSubmit();
 }
 
-// Sentences arrive as raw PCM (Kokoro) or MP3 (Edge). MP3 decoding is async, so sentences are chained
-// to keep their order, and the utterance only "ends" once every pending decode has been scheduled.
-function playAudioChunk(data) {
-  if (data.id !== playback.id) return;
-  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-  const id = playback.id;
-  playback.pending = (playback.pending || 0) + 1;
-  playback.chain = (playback.chain || Promise.resolve()).then(async () => {
-    try {
-      if (playback.id !== id) return;
-      const bytes = Uint8Array.from(atob(data.format === 'mp3' ? data.data : data.pcm), c => c.charCodeAt(0));
-      let buffer;
-      if (data.format === 'mp3') {
-        buffer = await audioCtx.decodeAudioData(bytes.buffer);
-      } else {
-        const pcm = new Int16Array(bytes.buffer, 0, Math.floor(bytes.length / 2));
-        buffer = audioCtx.createBuffer(1, pcm.length, data.rate);
-        const channel = buffer.getChannelData(0);
-        for (let i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768;
-      }
-      if (playback.id !== id) return;
-      scheduleBuffer(buffer, id);
-    } catch (err) {
-      console.error('AgentCall audio chunk failed', err);
-    } finally {
-      if (playback.id === id) { playback.pending -= 1; maybeFinishPlayback(); }
-    }
-  });
+// Sentences arrive as MP3 (Edge) or raw PCM (Kokoro) and are played one after another with <audio>
+// elements: unlike WebAudio buffers, they can change speed instantly while keeping the voice's pitch.
+const VOICE_RATES = [1, 1.2, 1.4, 1.6, 0.9];
+let voiceRate = (() => { try { const r = Number(localStorage.getItem('agentcall.voiceRate')); return VOICE_RATES.includes(r) ? r : 1; } catch { return 1; } })();
+
+function setVoiceRate(rate) {
+  voiceRate = rate;
+  try { localStorage.setItem('agentcall.voiceRate', String(rate)); } catch {}
+  for (const el of [playback.current, ...(playback.queue || [])]) if (el) el.playbackRate = rate;
+  const btn = document.getElementById('rateBtn');
+  if (btn) btn.textContent = formatRate(rate);
 }
 
-function scheduleBuffer(buffer, id) {
-  const source = audioCtx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(audioCtx.destination);
-  const at = Math.max(audioCtx.currentTime + 0.03, playback.nextTime);
-  source.start(at);
-  playback.nextTime = at + buffer.duration + 0.06; // short breath between sentences
-  playback.sources.push(source);
-  source.onended = () => {
-    if (playback.id !== id) return;
-    playback.sources = playback.sources.filter(x => x !== source);
-    maybeFinishPlayback();
+function formatRate(rate) { return `${String(rate).replace('.', ',')}×`; }
+
+function wavBlob(pcmBytes, rate) {
+  const header = new ArrayBuffer(44);
+  const v = new DataView(header);
+  const text = (o, s) => { for (let i = 0; i < s.length; i += 1) v.setUint8(o + i, s.charCodeAt(i)); };
+  text(0, 'RIFF'); v.setUint32(4, 36 + pcmBytes.length, true); text(8, 'WAVE');
+  text(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  text(36, 'data'); v.setUint32(40, pcmBytes.length, true);
+  return new Blob([header, pcmBytes], { type: 'audio/wav' });
+}
+
+function playAudioChunk(data) {
+  if (data.id !== playback.id) return;
+  const bytes = Uint8Array.from(atob(data.format === 'mp3' ? data.data : data.pcm), c => c.charCodeAt(0));
+  const blob = data.format === 'mp3' ? new Blob([bytes], { type: 'audio/mpeg' }) : wavBlob(bytes, data.rate);
+  const el = new Audio(URL.createObjectURL(blob));
+  el.preservesPitch = true;
+  el.playbackRate = voiceRate;
+  playback.queue.push(el);
+  if (!playback.current) playNextChunk(playback.id);
+}
+
+function playNextChunk(id) {
+  if (playback.id !== id || playback.current) return;
+  const el = playback.queue.shift();
+  if (!el) { maybeFinishPlayback(); return; }
+  playback.current = el;
+  el.playbackRate = voiceRate;
+  const next = () => {
+    URL.revokeObjectURL(el.src);
+    if (playback.id !== id || playback.current !== el) return;
+    playback.current = null;
+    setTimeout(() => playNextChunk(id), 60); // short breath between sentences
   };
+  el.onended = next;
+  el.onerror = next;
+  el.play().catch(next);
 }
 
 function maybeFinishPlayback() {
-  if (!playback.id || !playback.done || playback.sources.length || playback.pending) return;
+  if (!playback.id || !playback.done || playback.current || playback.queue.length) return;
   const wasAck = playback.ack;
-  playback = { id: null, sources: [], nextTime: 0, done: false };
+  playback = emptyPlayback();
   if (wasAck) { lastSpokenEndedAt = Date.now(); setTts(false); return; }
   speechFinished();
 }
+
+function emptyPlayback(extra = {}) { return { id: null, queue: [], current: null, done: false, ...extra }; }
 
 // Instant "Vale, se lo paso a Claude." after the user's answer is sent, so the line never feels dead.
 function acknowledge() {
   if (ttsEngine !== 'kokoro' || muted) return;
   stopSpeech();
   const id = `ack${++uttCounter}`;
-  playback = { id, sources: [], nextTime: 0, done: false, ack: true };
+  playback = emptyPlayback({ id, ack: true });
   lastSpokenText = 'Vale, se lo paso a Claude. Entendido, se lo digo. Perfecto, se lo paso.';
   setTts(true);
   window.agentCall.ttsAck(id);
@@ -443,8 +458,8 @@ function stopSpeech() {
   const wasSpeaking = Boolean(currentUtterance || playback.id);
   if (playback.id) {
     window.agentCall.ttsStop();
-    for (const source of playback.sources) { try { source.stop(); } catch {} }
-    playback = { id: null, sources: [], nextTime: 0, done: false };
+    for (const el of [playback.current, ...playback.queue]) { if (el) { try { el.pause(); URL.revokeObjectURL(el.src); } catch {} } }
+    playback = emptyPlayback();
   }
   currentUtterance = null;
   speechSynthesis.cancel();
@@ -456,12 +471,12 @@ window.agentCall.onTts(data => {
   if (data.type === 'ready') ttsEngine = 'kokoro'; // any worker engine (kokoro or edge) streams audio here
   else if (data.type === 'unavailable') {
     ttsEngine = 'browser';
-    if (playback.id && !playback.ack) { const text = lastSpokenText; playback = { id: null, sources: [], nextTime: 0, done: false }; speakWithBrowser(text); }
+    if (playback.id && !playback.ack) { const text = lastSpokenText; playback = emptyPlayback(); speakWithBrowser(text); }
   } else if (data.type === 'audio') playAudioChunk(data);
   else if (data.type === 'done' && data.id === playback.id) {
     if (!data.chunks && !data.interrupted && !playback.ack) {
       // The voice engine produced nothing (network/model error): say it with the Windows voice instead.
-      playback = { id: null, sources: [], nextTime: 0, done: false };
+      playback = emptyPlayback();
       speakWithBrowser(lastSpokenText);
       return;
     }
@@ -521,6 +536,61 @@ function syncRing(call) {
   if (call) startRing(call.type);
 }
 syncRing.current = null;
+
+// ── Quick answers: tap an option (or Sí/No) instead of saying it ─────────────
+
+let multiPick = { key: '', labels: new Set() };
+
+function quickAnswersHtml(call) {
+  if (!canRespond(call)) return '';
+  if (call.interactionKind === 'permission') {
+    return `<div class="quick-answers" role="group" aria-label="Respuesta rápida">
+      <button class="quick-btn yes" data-choice="allow">Sí, permitir</button>
+      <button class="quick-btn no" data-choice="deny">No</button>
+    </div>`;
+  }
+  const q = call.currentQuestion;
+  if (call.interactionKind !== 'ask' || !q || !q.options?.length) return '';
+  const key = `${call.id}:${call.questionIndex}`;
+  if (multiPick.key !== key) multiPick = { key, labels: new Set() };
+  const buttons = q.options.map((o, i) => {
+    const picked = multiPick.labels.has(o.label);
+    return `<button class="quick-btn option ${picked ? 'picked' : ''}" data-option="${i}" ${q.multiSelect ? `aria-pressed="${picked}"` : ''} title="${esc(o.description)}">
+      <span class="quick-letter">${'ABCDE'[i] || i + 1}</span><span class="quick-label">${esc(o.label)}</span>
+    </button>`;
+  }).join('');
+  const send = q.multiSelect
+    ? `<button class="quick-btn send" data-send-multi ${multiPick.labels.size ? '' : 'disabled'}>Enviar selección</button>`
+    : '';
+  return `<div class="quick-answers ${q.multiSelect ? 'multi' : ''}" role="group" aria-label="${q.multiSelect ? 'Elige una o varias' : 'Elige una opción'}">${buttons}${send}</div>`;
+}
+
+function bindQuickAnswers(call) {
+  const box = main.querySelector('.quick-answers');
+  if (!box) return;
+  const submit = async (choice) => {
+    stopSpeech();
+    clearVoiceDraft();
+    const result = await window.agentCall.submitChoice(call.id, choice).catch(err => ({ ok: false, error: err.message }));
+    if (!result?.ok) showBanner(result?.error || 'No se pudo enviar la respuesta.');
+    else if (result.resolved !== false) acknowledge();
+  };
+  box.querySelectorAll('[data-choice]').forEach(btn => { btn.onclick = () => submit(btn.dataset.choice); });
+  const q = call.currentQuestion;
+  box.querySelectorAll('[data-option]').forEach(btn => {
+    btn.onclick = () => {
+      const label = q.options[Number(btn.dataset.option)].label;
+      if (!q.multiSelect) return submit(label);
+      if (multiPick.labels.has(label)) multiPick.labels.delete(label); else multiPick.labels.add(label);
+      btn.classList.toggle('picked', multiPick.labels.has(label));
+      btn.setAttribute('aria-pressed', String(multiPick.labels.has(label)));
+      const send = box.querySelector('[data-send-multi]');
+      if (send) send.disabled = !multiPick.labels.size;
+    };
+  });
+  const send = box.querySelector('[data-send-multi]');
+  if (send) send.onclick = () => submit(q.options.map(o => o.label).filter(l => multiPick.labels.has(l)));
+}
 
 // ── Voice answers ────────────────────────────────────────────────────────────
 
