@@ -134,3 +134,7 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .quick-btn.send { flex: 1 1 100%; justify-content: center; color: var(--green); border-color: rgba(114,224,166,.35); }
 .quick-btn:disabled { opacity: .45; cursor: default; }
 .quick-btn:focus-visible, .rate-btn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+.quick-answers { max-height: 210px; }
+.quick-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.quick-desc { font-size: 10px; font-weight: 500; color: var(--muted); line-height: 1.35; }

@@ -1,0 +1,12 @@
+{
+  "name": "better-call-claude",
+  "owner": { "name": "Maybe-Sama" },
+  "metadata": { "description": "AgentCall: Claude Code calls you on Windows when it needs you or finishes something important." },
+  "plugins": [
+    {
+      "name": "agentcall",
+      "source": "./claude-plugin",
+      "description": "Voice calls for Claude Code questions, permissions and results. Per session: /better-call-saul on | off."
+    }
+  ]
+}

@@ -18,6 +18,8 @@ catch {
     Write-Warning "AgentCall no está escuchando en 127.0.0.1:32147. Claude seguirá funcionando, pero las llamadas no aparecerán."
 }
 
+# Sessions started from here call from the first moment; elsewhere use "/better-call-saul on".
+$env:AGENTCALL_SESSION_MODE = 'on'
 Push-Location $Project
 try { & claude --plugin-dir $Plugin @ClaudeArgs }
 finally { Pop-Location }

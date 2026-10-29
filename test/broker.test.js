@@ -26,7 +26,7 @@ function permissionPayload(session = 'p1', command = 'mkdir demo') {
 }
 
 test('AskUserQuestion rings, answers through updatedInput.answers and waits for Claude', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   let response;
   const call = broker.receiveAskUser(askPayload(), body => { response = body; });
   assert.equal(call.status, 'ringing');
@@ -43,7 +43,7 @@ test('AskUserQuestion rings, answers through updatedInput.answers and waits for 
 });
 
 test('a clarification is passed verbatim as the answer (native "Other"), never forced into an option', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   let response;
   const call = broker.receiveAskUser(askPayload('clarify'), body => { response = body; });
   broker.answer(call.id);
@@ -59,7 +59,7 @@ test('multi-question ask walks through questions and stops early on a clarificat
     { question: 'Q2', header: 'H2', options: [{ label: 'Grande' }, { label: 'Pequeño' }] },
     { question: 'Q3', header: 'H3', options: [{ label: 'Sí' }, { label: 'No' }] },
   ];
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   const call = broker.receiveAskUser(askPayload('multi', qs), body => { response = body; });
   broker.answer(call.id);
@@ -96,7 +96,7 @@ test('clarification detector handles unpunctuated STT output', () => {
 });
 
 test('final Stop call can receive a spoken follow-up and continue Claude via additionalContext', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   let response;
   const call = broker.receiveCompletion({ session_id: 's2', cwd: 'C:/work/web', last_assistant_message: 'La página está terminada.' }, { responder: body => { response = body; } });
   broker.answer(call.id);
@@ -107,7 +107,7 @@ test('final Stop call can receive a spoken follow-up and continue Claude via add
 });
 
 test('the next Stop of the same session merges into the active call instead of ringing again', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   const call = broker.receiveCompletion({ session_id: 'loop', last_assistant_message: 'Hecho.' }, { responder: () => {} });
   broker.answer(call.id);
   broker.submitUserText(call.id, 'ábreme la web');
@@ -121,7 +121,7 @@ test('the next Stop of the same session merges into the active call instead of r
 });
 
 test('hanging up a completion call means done and lets Stop finish', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   let response = null;
   const call = broker.receiveCompletion({ session_id: 's3', last_assistant_message: 'He terminado.' }, { responder: body => { response = body; } });
   broker.answer(call.id);
@@ -132,7 +132,7 @@ test('hanging up a completion call means done and lets Stop finish', () => {
 
 test('short routine turns release Stop immediately without ringing', () => {
   let t = 1_000;
-  const broker = new CallBroker({ now: () => t, minResultMs: 20_000 });
+  const broker = new CallBroker({ defaultMode: 'on', now: () => t, minResultMs: 20_000 });
   broker.notePrompt({ session_id: 'quick', prompt: 'hola' });
   t += 3_000;
   let response;
@@ -148,7 +148,7 @@ test('short routine turns release Stop immediately without ringing', () => {
 
 test('a short turn that needed a question still produces a result call', () => {
   let t = 1_000;
-  const broker = new CallBroker({ now: () => t, minResultMs: 20_000 });
+  const broker = new CallBroker({ defaultMode: 'on', now: () => t, minResultMs: 20_000 });
   broker.notePrompt({ session_id: 'q', prompt: 'haz algo' });
   const ask = broker.receiveAskUser(askPayload('q'), () => {});
   broker.answer(ask.id);
@@ -159,7 +159,7 @@ test('a short turn that needed a question still produces a result call', () => {
 });
 
 test('typing in the terminal releases a held Stop so Claude Code stays usable', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   const call = broker.receiveCompletion({ session_id: 'term', last_assistant_message: 'Listo.' }, { responder: body => { response = body; } });
   assert.equal(call.status, 'ringing');
@@ -169,7 +169,7 @@ test('typing in the terminal releases a held Stop so Claude Code stays usable', 
 });
 
 test('a permission answered in the terminal is cleared when the matching PostToolUse arrives', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   const call = broker.receivePermission(permissionPayload('pt'), body => { response = body; });
   broker.noteToolDone({ session_id: 'pt', tool_name: 'Bash', tool_input: { command: 'other' } });
@@ -180,7 +180,7 @@ test('a permission answered in the terminal is cleared when the matching PostToo
 });
 
 test('a new request from the same session supersedes an older held one', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let first;
   const old = broker.receivePermission(permissionPayload('sup', 'a'), body => { first = body; });
   const next = broker.receivePermission(permissionPayload('sup', 'b'), () => {});
@@ -190,21 +190,21 @@ test('a new request from the same session supersedes an older held one', () => {
 });
 
 test('an aborted hook request cancels its call', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   const call = broker.receivePermission(permissionPayload('ab'), () => {});
   assert.equal(broker.cancel(call.id), true);
   assert.equal(broker.calls.has(call.id), false);
 });
 
 test('permission requests for AskUserQuestion are ignored (handled by PreToolUse)', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   assert.equal(broker.receivePermission({ session_id: 'x', tool_name: 'AskUserQuestion', tool_input: {} }, b => { response = b; }), null);
   assert.deepEqual(response, {});
 });
 
 test('permission: yes/no/clarification produce the documented PermissionRequest decisions', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   let call = broker.receivePermission(permissionPayload('perm1'), b => { response = b; });
   broker.answer(call.id);
@@ -220,7 +220,7 @@ test('permission: yes/no/clarification produce the documented PermissionRequest 
 });
 
 test('a second session is queued while another call is active, and rings after hangup', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   const first = broker.receiveAskUser(askPayload('s1'), () => {});
   broker.answer(first.id);
   const second = broker.receiveAskUser(askPayload('s2'), () => {});
@@ -232,7 +232,7 @@ test('a second session is queued while another call is active, and rings after h
 });
 
 test('only one call rings at a time; the next one waits in the queue', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   const a = broker.receiveAskUser(askPayload('r1'), () => {});
   const b = broker.receiveAskUser(askPayload('r2'), () => {});
   assert.equal(a.status, 'ringing');
@@ -242,14 +242,14 @@ test('only one call rings at a time; the next one waits in the queue', () => {
 });
 
 test('DND routes new calls to pending silently', () => {
-  const broker = new CallBroker({ ringTimeoutMs: 1000 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 1000 });
   broker.setDnd(true);
   const call = broker.receiveAskUser(askPayload('s4'), () => {});
   assert.equal(call.status, 'pending');
 });
 
 test('ring timeout moves call to pending and rings the next queued call', async () => {
-  const broker = new CallBroker({ ringTimeoutMs: 20 });
+  const broker = new CallBroker({ defaultMode: 'on', ringTimeoutMs: 20 });
   const call = broker.receiveAskUser(askPayload('s5'), () => {});
   const next = broker.receiveAskUser(askPayload('s6'), () => {});
   assert.equal(call.status, 'ringing');
@@ -259,7 +259,7 @@ test('ring timeout moves call to pending and rings the next queued call', async 
 });
 
 test('a pending call can be called back and still answers the held hook', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   const call = broker.receiveCompletion({ session_id: 'cb', last_assistant_message: 'Terminado.' }, { responder: b => { response = b; } });
   broker._moveToPending(call);
@@ -269,7 +269,7 @@ test('a pending call can be called back and still answers the held hook', () => 
 });
 
 test('snooze accepts only the configured values', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   const call = broker.receiveAskUser(askPayload('sn'), () => {});
   assert.equal(broker.snooze(call.id, 11), false);
   for (const m of [1, 10, 15, 20, 30, 45, 60, 120]) assert.equal(broker.snooze(call.id, m), true);
@@ -277,7 +277,7 @@ test('snooze accepts only the configured values', () => {
 });
 
 test('StopFailure creates an informational error call', () => {
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   const call = broker.receiveCompletion({ session_id: 'err', error: 'rate_limit' }, { failure: true });
   assert.equal(call.type, 'error');
   assert.equal(call.interactionKind, null);
@@ -285,7 +285,7 @@ test('StopFailure creates an informational error call', () => {
 });
 
 test('incoming call context prefers the session title, then a meaningful prompt', () => {
-  const broker = new CallBroker({ readTitle: p => (p === 'with-title.jsonl' ? 'Rediseñar el panel de alumnos' : '') });
+  const broker = new CallBroker({ defaultMode: 'on', readTitle: p => (p === 'with-title.jsonl' ? 'Rediseñar el panel de alumnos' : '') });
   broker.notePrompt({ session_id: 'c1', prompt: 'Implementa el login con Supabase y tests de integración' });
   broker.notePrompt({ session_id: 'c1', prompt: 'sí' });
   const a = broker.receiveAskUser({ ...askPayload('c1') }, () => {});
@@ -342,7 +342,7 @@ test('quick-answer buttons: option labels, multi-select and Sí/No on permission
     { question: 'Q1', header: 'Login', options: [{ label: 'Supabase Auth (Recomendado)' }, { label: 'NextAuth' }, { label: 'Clerk' }] },
     { question: 'Q2', header: 'Métodos', multiSelect: true, options: [{ label: 'Email y contraseña' }, { label: 'Google' }, { label: 'Enlace mágico' }] },
   ];
-  const broker = new CallBroker();
+  const broker = new CallBroker({ defaultMode: 'on', defaultMode: 'on' });
   let response;
   const call = broker.receiveAskUser(askPayload('btn', qs), b => { response = b; });
   broker.answer(call.id);
@@ -360,4 +360,41 @@ test('quick-answer buttons: option labels, multi-select and Sí/No on permission
   broker.answer(p.id);
   broker.submitChoice(p.id, 'allow');
   assert.equal(permission.hookSpecificOutput.decision.behavior, 'allow');
+});
+
+test('/better-call-saul on|off toggles calls per session; off sessions never ring', () => {
+  const broker = new CallBroker(); // default: off
+  let response;
+  assert.equal(broker.receiveAskUser(askPayload('m1'), b => { response = b; }), null);
+  assert.deepEqual(response, {});
+
+  const ctxOn = broker.notePrompt({ session_id: 'm1', prompt: '/better-call-saul on' });
+  assert.match(ctxOn, /ACTIVADAS/);
+  assert.match(ctxOn, /AskUserQuestion/);
+  assert.equal(broker.receiveAskUser(askPayload('m1'), () => {}).status, 'ringing');
+  assert.equal(broker.receiveAskUser(askPayload('other'), () => {}), null);
+
+  let held;
+  const stop = broker.receiveCompletion({ session_id: 'm2', last_assistant_message: 'x' }, { responder: b => { held = b; }, hint: 'on' });
+  assert.ok(stop);
+  assert.match(broker.notePrompt({ session_id: 'm2', prompt: '/agentcall:better-call-saul off' }), /DESACTIVADAS/);
+  assert.deepEqual(held, {});
+  assert.equal(broker.receiveCompletion({ session_id: 'm2', last_assistant_message: 'y' }, { responder: () => {}, hint: 'on' }), null);
+  assert.match(broker.notePrompt({ session_id: 'm2', prompt: '/better-call-saul' }), /DESACTIVADAS/);
+
+  const restored = new CallBroker();
+  restored.importPersistentState(broker.exportPersistentState());
+  assert.equal(restored.sessionMode('m1'), 'on');
+  assert.equal(restored.sessionMode('m2', 'on'), 'off');
+  assert.equal(restored.sessionStartContext({ session_id: 'new' }, 'on') !== null, true);
+  assert.equal(restored.sessionStartContext({ session_id: 'new' }), null);
+});
+
+test('the confirmation turn of /better-call-saul on does not ring', () => {
+  const broker = new CallBroker();
+  broker.notePrompt({ session_id: 'q1', prompt: '/better-call-saul on' });
+  let response;
+  assert.equal(broker.receiveCompletion({ session_id: 'q1', last_assistant_message: 'Llamadas activadas.' }, { responder: b => { response = b; } }), null);
+  assert.deepEqual(response, {});
+  assert.ok(broker.receiveCompletion({ session_id: 'q1', last_assistant_message: 'Trabajo hecho.' }, { responder: () => {} }));
 });

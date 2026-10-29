@@ -41,6 +41,26 @@ Then use the helper to start Claude with AgentCall:
 powershell -ExecutionPolicy Bypass -File .\scripts\run-claude-with-agentcall.ps1
 ```
 
+## Use it in every Claude Code session
+
+Install the plugin once for your user. It is read straight from this folder, so updates apply without reinstalling:
+
+```powershell
+claude plugin marketplace add E:\CODE_feliz\BETTER-CALL-CLAUDE
+claude plugin install agentcall@better-call-claude
+copy claude-plugin\commands\better-call-saul.md $env:USERPROFILE\.claude\commands\
+```
+
+Calls are **off by default** in every session. Inside any Claude Code session:
+
+- `/better-call-saul on` — Claude calls you in this session (questions, permissions, finished work).
+- `/better-call-saul off` — back to normal terminal behaviour.
+- `/better-call-saul` — shows the current state.
+
+The plugin also exposes it as `/agentcall:better-call-saul`. Sessions started with `scripts/run-claude-with-agentcall.ps1`
+are on from the start; `{"defaultMode": "on"}` in `%LOCALAPPDATA%\AgentCall\config.json` makes every session call.
+The choice is remembered per session, and if AgentCall is closed Claude Code works exactly as without the plugin.
+
 ## Documentation
 
 - `docs/SYSTEM_SPEC.md` — product and system specification

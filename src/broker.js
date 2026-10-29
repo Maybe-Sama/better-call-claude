@@ -16,6 +16,23 @@ const TITLE_CACHE_MS = 30_000;
 // did not exist (native terminal dialog for permissions/questions, normal stop for Stop).
 const NO_DECISION = Object.freeze({});
 
+// "/better-call-saul on|off" (user command) or "/agentcall:better-call-saul on|off" (plugin command).
+const TOGGLE_COMMAND = /^\s*\/(?:agentcall:)?better-call-saul\b\s*(on|off|status|estado)?/i;
+
+// Interaction rules Claude receives when calls are enabled for a session (SessionStart or "/better-call-saul on").
+const CALL_RULES = `AgentCall is active for this session: the user supervises Claude Code from a Windows voice-call app.
+Questions, permission prompts and the final message of a turn are spoken aloud to the user in a phone-style call, in Spanish, and the user answers by voice, text or quick-answer buttons.
+
+Interaction rules:
+- Work autonomously through ordinary implementation details. Do not ask about trivial choices you can safely make yourself.
+- When you genuinely need a decision, missing information or a clarification, use AskUserQuestion. Keep 2-4 options with short, distinct labels that are easy to say aloud.
+- An AskUserQuestion answer may be free text instead of an option. If it is itself a question or doubt, answer it first; ask again only if a decision is still needed. Never assume a choice the user did not make.
+- When a turn ends with something the user should hear (a finished piece of work, a blocker, a result), start the final message with one short spoken-style paragraph (1-3 sentences, no markdown, no code, no file paths, no URLs) saying what happened, the outcome and what matters next. Put technical detail after that paragraph. If you need something from the user, say it in the last paragraph.
+- If the user replies during the result call, their reply arrives as additional context of this same session: treat it as a new user request.
+- Do not mention AgentCall or add special tags or boilerplate. Write normally.`;
+
+const CALLS_OFF_NOTE = 'AgentCall voice calls are now disabled for this session. Ignore the earlier call-related rules and interact normally through the terminal.';
+
 function cleanText(value, max = 4000) {
   if (value == null) return '';
   const text = String(value).replace(/\r/g, '').trim();
@@ -87,6 +104,7 @@ class CallBroker extends EventEmitter {
     minResultMs = MIN_RESULT_TURN_MS,
     now = () => Date.now(),
     readTitle = () => '',
+    defaultMode = 'off',
   } = {}) {
     super();
     this.ringTimeoutMs = ringTimeoutMs;
@@ -99,6 +117,10 @@ class CallBroker extends EventEmitter {
     this.sessions = new Map();
     this.activeId = null;
     this.dnd = false;
+    // Per-session on/off ("/better-call-saul"). Sessions without an explicit choice use the hint sent by the
+    // launcher (X-AgentCall-Mode header) or defaultMode.
+    this.defaultMode = defaultMode === 'on' ? 'on' : 'off';
+    this.sessionModes = new Map();
   }
 
   setDnd(value) {
@@ -117,8 +139,39 @@ class CallBroker extends EventEmitter {
 
   // UserPromptSubmit: the user is typing in the terminal. Any request still held for this session is
   // stale (the user chose the terminal), so release it and let Claude Code continue normally.
-  notePrompt(payload = {}) {
-    if (!payload.session_id) return;
+  // Is AgentCall enabled for this session? hint: value of the X-AgentCall-Mode header ("on"/"off"/"").
+  sessionMode(sessionId, hint = '') {
+    if (sessionId && this.sessionModes.has(sessionId)) return this.sessionModes.get(sessionId);
+    if (hint === 'on' || hint === 'off') return hint;
+    return this.defaultMode;
+  }
+
+  setSessionMode(sessionId, mode) {
+    if (!sessionId) return;
+    this.sessionModes.set(sessionId, mode === 'on' ? 'on' : 'off');
+    if (this.sessionModes.size > 300) this.sessionModes.delete(this.sessionModes.keys().next().value);
+    if (mode !== 'on') this._releaseSession(sessionId, null, 'Llamadas desactivadas para esta sesión.');
+    this._changed('mode', { sessionId, mode });
+  }
+
+  // SessionStart: the call rules go into the session only when calls are on for it.
+  sessionStartContext(payload = {}, hint = '') {
+    return this.sessionMode(payload.session_id, hint) === 'on' ? CALL_RULES : null;
+  }
+
+  // UserPromptSubmit. Returns additionalContext for Claude when the prompt is "/better-call-saul on|off".
+  notePrompt(payload = {}, hint = '') {
+    if (!payload.session_id) return null;
+    const toggle = TOGGLE_COMMAND.exec(String(payload.prompt || ''));
+    if (toggle) {
+      const wanted = (toggle[1] || 'status').toLowerCase();
+      this._session(payload).quietStop = true; // Claude's one-line confirmation is not a result worth a call
+      if (wanted === 'on' || wanted === 'off') this.setSessionMode(payload.session_id, wanted);
+      const mode = this.sessionMode(payload.session_id, hint);
+      if (wanted === 'on') return `AgentCall: llamadas ACTIVADAS para esta sesión.\n\n${CALL_RULES}`;
+      if (wanted === 'off') return `AgentCall: llamadas DESACTIVADAS para esta sesión. ${CALLS_OFF_NOTE}`;
+      return `AgentCall: las llamadas están ${mode === 'on' ? 'ACTIVADAS' : 'DESACTIVADAS'} en esta sesión.`;
+    }
     const session = this._session(payload);
     const prompt = cleanText(payload.prompt, 1000);
     if (prompt) {
@@ -129,6 +182,7 @@ class CallBroker extends EventEmitter {
     session.interacted = false;
     this._releaseSession(payload.session_id, null, 'Has seguido en la terminal; esta petición ya no está pendiente.');
     this._changed();
+    return null;
   }
 
   // PostToolUse: if the user answered a permission prompt in the terminal, the matching held
@@ -142,7 +196,15 @@ class CallBroker extends EventEmitter {
     }
   }
 
-  receiveAskUser(payload = {}, responder) {
+  // Calls disabled for this session: Claude Code continues exactly as without AgentCall.
+  _off(payload, responder, hint) {
+    if (this.sessionMode(payload.session_id, hint) === 'on') return false;
+    responder?.(NO_DECISION);
+    return true;
+  }
+
+  receiveAskUser(payload = {}, responder, hint = '') {
+    if (this._off(payload, responder, hint)) return null;
     const questions = Array.isArray(payload?.tool_input?.questions) ? payload.tool_input.questions : [];
     if (!questions.length) {
       responder?.(NO_DECISION);
@@ -159,7 +221,8 @@ class CallBroker extends EventEmitter {
     });
   }
 
-  receivePermission(payload = {}, responder) {
+  receivePermission(payload = {}, responder, hint = '') {
+    if (this._off(payload, responder, hint)) return null;
     if (payload.tool_name === 'AskUserQuestion') {
       // Questions are handled by the PreToolUse hook; never ring twice for the same thing.
       responder?.(NO_DECISION);
@@ -176,13 +239,18 @@ class CallBroker extends EventEmitter {
     });
   }
 
-  receiveCompletion(payload = {}, { failure = false, responder = null } = {}) {
+  receiveCompletion(payload = {}, { failure = false, responder = null, hint = '' } = {}) {
+    if (this._off(payload, responder, hint)) return null;
     const sessionId = payload.session_id || `unknown-${crypto.randomUUID()}`;
     const session = this._session(payload);
     this._releaseSession(sessionId, null, null);
 
     const active = this._active();
     const sameActive = Boolean(active && active.sessionId === sessionId);
+    if (session.quietStop && !failure) {
+      session.quietStop = false;
+      if (!sameActive) { responder?.(NO_DECISION); return null; }
+    }
     const elapsed = session.lastPromptAt ? this.now() - session.lastPromptAt : Infinity;
     if (!failure && !sameActive && !payload.stop_hook_active && !session.interacted && elapsed < this.minResultMs) {
       responder?.(NO_DECISION);
@@ -441,7 +509,12 @@ class CallBroker extends EventEmitter {
   // Only operational state survives a restart (DND). Held calls belong to live HTTP requests and
   // cannot be resumed after a restart, so they are never persisted; neither are transcripts.
   exportPersistentState() {
-    return { dnd: this.dnd };
+    return { dnd: this.dnd, sessionModes: Object.fromEntries(this.sessionModes) };
+  }
+
+  importPersistentState(saved = {}) {
+    this.dnd = Boolean(saved.dnd);
+    for (const [id, mode] of Object.entries(saved.sessionModes || {})) this.sessionModes.set(id, mode === 'on' ? 'on' : 'off');
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
@@ -765,6 +838,7 @@ function parsePermission(text) {
 
 module.exports = {
   CallBroker,
+  CALL_RULES,
   SNOOZE_MINUTES,
   RING_TIMEOUT_MS,
   MIN_RESULT_TURN_MS,

@@ -15,6 +15,7 @@ const CONFIG_KEYS = {
   mic: 'AGENTCALL_MIC', voice: 'AGENTCALL_TTS_VOICE', ttsEngine: 'AGENTCALL_TTS_ENGINE', sttEngine: 'AGENTCALL_STT_ENGINE',
   whisperModel: 'AGENTCALL_WHISPER_MODEL', whisperPartialModel: 'AGENTCALL_WHISPER_PARTIAL_MODEL', vocab: 'AGENTCALL_STT_VOCAB',
   minResultSeconds: 'AGENTCALL_MIN_RESULT_SECONDS', port: 'AGENTCALL_PORT',
+  defaultMode: 'AGENTCALL_DEFAULT_MODE',
   ttsProvider: 'AGENTCALL_TTS_PROVIDER', edgeVoice: 'AGENTCALL_EDGE_VOICE', edgeRate: 'AGENTCALL_EDGE_RATE',
   micGain: 'AGENTCALL_MIC_GAIN', speechThreshold: 'AGENTCALL_SPEECH_THRESHOLD', whisperBackend: 'AGENTCALL_WHISPER_BACKEND',
 };
@@ -39,7 +40,13 @@ const PORT = numberSetting('AGENTCALL_PORT', 32147, 1024, 65535);
 const MIN_RESULT_MS = numberSetting('AGENTCALL_MIN_RESULT_SECONDS', MIN_RESULT_TURN_MS / 1000, 0, 3600) * 1000;
 const VERSION = require('../package.json').version;
 
-const broker = new CallBroker({ minResultMs: MIN_RESULT_MS, readTitle: readSessionTitle });
+// Sessions call only after "/better-call-saul on", unless started by run-claude-with-agentcall.ps1
+// (header X-AgentCall-Mode: on) or defaultMode is "on".
+const broker = new CallBroker({
+  minResultMs: MIN_RESULT_MS,
+  readTitle: readSessionTitle,
+  defaultMode: process.env.AGENTCALL_DEFAULT_MODE === 'on' ? 'on' : 'off',
+});
 
 let mainWindow = null;
 let tray = null;
@@ -81,7 +88,7 @@ function loadOperationalState() {
   try {
     if (!fs.existsSync(stateFile())) return;
     const saved = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
-    broker.dnd = Boolean(saved.dnd);
+    broker.importPersistentState(saved);
     lastPersisted = JSON.stringify(broker.exportPersistentState());
   } catch (err) {
     console.error('[AgentCall] Could not restore state:', err.message);
@@ -254,11 +261,21 @@ async function routeHook(req, res) {
   try { body = await readJson(req); }
   catch (err) { return jsonResponse(res, 400, { error: err.message }); }
   const session = String(body.session_id || '').slice(0, 8);
+  const hint = String(req.headers['x-agentcall-mode'] || '').trim().toLowerCase();
 
   switch (url) {
-    case '/hooks/user-prompt-submit':
-      broker.notePrompt(body);
-      return jsonResponse(res, 200, {});
+    case '/hooks/session-start': {
+      const context = broker.sessionStartContext(body, hint);
+      log(`SessionStart [${session}] llamadas ${broker.sessionMode(body.session_id, hint).toUpperCase()}`);
+      return jsonResponse(res, 200, context ? { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } } : {});
+    }
+
+    case '/hooks/user-prompt-submit': {
+      const context = broker.notePrompt(body, hint);
+      if (!context) return jsonResponse(res, 200, {});
+      log(`/better-call-saul [${session}] → ${broker.sessionMode(body.session_id, hint)}`);
+      return jsonResponse(res, 200, { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } });
+    }
 
     case '/hooks/post-tool-use':
       broker.noteToolDone(body);
@@ -267,27 +284,27 @@ async function routeHook(req, res) {
     case '/hooks/ask-user': {
       log(`AskUserQuestion [${session}]`);
       const hook = holdHook(res, `AskUserQuestion [${session}]`);
-      hook.bind(broker.receiveAskUser(body, hook.respond));
+      hook.bind(broker.receiveAskUser(body, hook.respond, hint));
       return;
     }
 
     case '/hooks/permission': {
       log(`PermissionRequest ${body.tool_name} [${session}]`);
       const hook = holdHook(res, `PermissionRequest [${session}]`);
-      hook.bind(broker.receivePermission(body, hook.respond));
+      hook.bind(broker.receivePermission(body, hook.respond, hint));
       return;
     }
 
     case '/hooks/stop': {
       log(`Stop [${session}] stop_hook_active=${Boolean(body.stop_hook_active)}`);
       const hook = holdHook(res, `Stop [${session}]`);
-      hook.bind(broker.receiveCompletion(body, { responder: hook.respond }));
+      hook.bind(broker.receiveCompletion(body, { responder: hook.respond, hint }));
       return;
     }
 
     case '/hooks/stop-failure':
       log(`StopFailure [${session}] ${body.error || ''}`);
-      broker.receiveCompletion(body, { failure: true });
+      broker.receiveCompletion(body, { failure: true, hint });
       return jsonResponse(res, 200, {});
 
     default:

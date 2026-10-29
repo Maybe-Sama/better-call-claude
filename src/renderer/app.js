@@ -390,6 +390,7 @@ function setVoiceRate(rate) {
   for (const el of [playback.current, ...(playback.queue || [])]) if (el) el.playbackRate = rate;
   const btn = document.getElementById('rateBtn');
   if (btn) btn.textContent = formatRate(rate);
+  if (currentUtterance) { const text = lastSpokenText; speechSynthesis.cancel(); currentUtterance = null; speakWithBrowser(text); }
 }
 
 function formatRate(rate) { return `${String(rate).replace('.', ',')}×`; }
@@ -407,9 +408,16 @@ function wavBlob(pcmBytes, rate) {
 
 function playAudioChunk(data) {
   if (data.id !== playback.id) return;
-  const bytes = Uint8Array.from(atob(data.format === 'mp3' ? data.data : data.pcm), c => c.charCodeAt(0));
-  const blob = data.format === 'mp3' ? new Blob([bytes], { type: 'audio/mpeg' }) : wavBlob(bytes, data.rate);
-  const el = new Audio(URL.createObjectURL(blob));
+  let el;
+  try {
+    const bytes = Uint8Array.from(atob(data.format === 'mp3' ? data.data : data.pcm), c => c.charCodeAt(0));
+    const blob = data.format === 'mp3' ? new Blob([bytes], { type: 'audio/mpeg' }) : wavBlob(bytes, data.rate);
+    el = new Audio(URL.createObjectURL(blob));
+  } catch (err) {
+    console.error('AgentCall: audio chunk skipped', err);
+    maybeFinishPlayback();
+    return;
+  }
   el.preservesPitch = true;
   el.playbackRate = voiceRate;
   playback.queue.push(el);
@@ -441,6 +449,14 @@ function maybeFinishPlayback() {
   speechFinished();
 }
 
+// Stop and release every <audio> element of the current utterance.
+function discardPlayback() {
+  for (const el of [playback.current, ...(playback.queue || [])]) {
+    if (el) { try { el.pause(); URL.revokeObjectURL(el.src); } catch {} }
+  }
+  playback = emptyPlayback();
+}
+
 function emptyPlayback(extra = {}) { return { id: null, queue: [], current: null, done: false, ...extra }; }
 
 // Instant "Vale, se lo paso a Claude." after the user's answer is sent, so the line never feels dead.
@@ -458,8 +474,7 @@ function stopSpeech() {
   const wasSpeaking = Boolean(currentUtterance || playback.id);
   if (playback.id) {
     window.agentCall.ttsStop();
-    for (const el of [playback.current, ...playback.queue]) { if (el) { try { el.pause(); URL.revokeObjectURL(el.src); } catch {} } }
-    playback = emptyPlayback();
+    discardPlayback();
   }
   currentUtterance = null;
   speechSynthesis.cancel();
@@ -471,7 +486,7 @@ window.agentCall.onTts(data => {
   if (data.type === 'ready') ttsEngine = 'kokoro'; // any worker engine (kokoro or edge) streams audio here
   else if (data.type === 'unavailable') {
     ttsEngine = 'browser';
-    if (playback.id && !playback.ack) { const text = lastSpokenText; playback = emptyPlayback(); speakWithBrowser(text); }
+    if (playback.id && !playback.ack) { const text = lastSpokenText; discardPlayback(); speakWithBrowser(text); }
   } else if (data.type === 'audio') playAudioChunk(data);
   else if (data.type === 'done' && data.id === playback.id) {
     if (!data.chunks && !data.interrupted && !playback.ack) {
@@ -556,7 +571,7 @@ function quickAnswersHtml(call) {
   const buttons = q.options.map((o, i) => {
     const picked = multiPick.labels.has(o.label);
     return `<button class="quick-btn option ${picked ? 'picked' : ''}" data-option="${i}" ${q.multiSelect ? `aria-pressed="${picked}"` : ''} title="${esc(o.description)}">
-      <span class="quick-letter">${'ABCDE'[i] || i + 1}</span><span class="quick-label">${esc(o.label)}</span>
+      <span class="quick-letter">${'ABCDE'[i] || i + 1}</span><span class="quick-text"><span class="quick-label">${esc(o.label)}</span>${o.description ? `<span class="quick-desc">${esc(o.description)}</span>` : ''}</span>
     </button>`;
   }).join('');
   const send = q.multiSelect

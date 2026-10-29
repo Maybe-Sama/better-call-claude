@@ -1,5 +1,5 @@
 {
-  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Every hook fails open when AgentCall is not running.",
+  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Calls are per session: \"/better-call-saul on|off\". Every hook fails open when AgentCall is not running.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,7 +7,15 @@
           {
             "type": "command",
             "command": "powershell.exe",
-            "args": ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.ps1"],
+            "args": [
+              "-NoLogo",
+              "-NoProfile",
+              "-NonInteractive",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.ps1"
+            ],
             "timeout": 10
           }
         ]
@@ -16,7 +24,18 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "http", "url": "http://127.0.0.1:32147/hooks/user-prompt-submit", "timeout": 3, "onFailure": "continue" }
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:32147/hooks/user-prompt-submit",
+            "headers": {
+              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
+            },
+            "allowedEnvVars": [
+              "AGENTCALL_SESSION_MODE"
+            ],
+            "onFailure": "continue",
+            "timeout": 3
+          }
         ]
       }
     ],
@@ -27,9 +46,15 @@
           {
             "type": "http",
             "url": "http://127.0.0.1:32147/hooks/ask-user",
+            "headers": {
+              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
+            },
+            "allowedEnvVars": [
+              "AGENTCALL_SESSION_MODE"
+            ],
+            "onFailure": "continue",
             "timeout": 86400,
-            "statusMessage": "AgentCall: te está llamando con esta pregunta (escribe aquí si prefieres seguir en la terminal)",
-            "onFailure": "continue"
+            "statusMessage": "AgentCall: te está llamando con esta pregunta (escribe aquí si prefieres seguir en la terminal)"
           }
         ]
       }
@@ -40,9 +65,15 @@
           {
             "type": "http",
             "url": "http://127.0.0.1:32147/hooks/permission",
+            "headers": {
+              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
+            },
+            "allowedEnvVars": [
+              "AGENTCALL_SESSION_MODE"
+            ],
+            "onFailure": "continue",
             "timeout": 86400,
-            "statusMessage": "AgentCall: te está llamando para pedir permiso",
-            "onFailure": "continue"
+            "statusMessage": "AgentCall: te está llamando para pedir permiso"
           }
         ]
       }
@@ -50,7 +81,18 @@
     "PostToolUse": [
       {
         "hooks": [
-          { "type": "http", "url": "http://127.0.0.1:32147/hooks/post-tool-use", "timeout": 2, "onFailure": "continue" }
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:32147/hooks/post-tool-use",
+            "headers": {
+              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
+            },
+            "allowedEnvVars": [
+              "AGENTCALL_SESSION_MODE"
+            ],
+            "onFailure": "continue",
+            "timeout": 2
+          }
         ]
       }
     ],
@@ -60,9 +102,15 @@
           {
             "type": "http",
             "url": "http://127.0.0.1:32147/hooks/stop",
+            "headers": {
+              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
+            },
+            "allowedEnvVars": [
+              "AGENTCALL_SESSION_MODE"
+            ],
+            "onFailure": "continue",
             "timeout": 86400,
-            "statusMessage": "AgentCall: llamada de resultado en curso (escribe aquí para seguir en la terminal)",
-            "onFailure": "continue"
+            "statusMessage": "AgentCall: llamada de resultado en curso (escribe aquí para seguir en la terminal)"
           }
         ]
       }
@@ -70,7 +118,18 @@
     "StopFailure": [
       {
         "hooks": [
-          { "type": "http", "url": "http://127.0.0.1:32147/hooks/stop-failure", "timeout": 3, "onFailure": "continue" }
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:32147/hooks/stop-failure",
+            "headers": {
+              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
+            },
+            "allowedEnvVars": [
+              "AGENTCALL_SESSION_MODE"
+            ],
+            "onFailure": "continue",
+            "timeout": 3
+          }
         ]
       }
     ]
