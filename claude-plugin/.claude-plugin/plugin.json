@@ -1,0 +1,9 @@
+{
+  "name": "agentcall",
+  "displayName": "AgentCall",
+  "version": "0.1.0",
+  "description": "Turns meaningful Claude Code handoffs, questions and permissions into Windows voice calls.",
+  "author": {"name": "AgentCall"},
+  "license": "MIT",
+  "keywords": ["voice", "windows", "hooks", "supervision", "calls"]
+}
