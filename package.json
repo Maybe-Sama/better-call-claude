@@ -9,12 +9,13 @@
     "start": "electron .",
     "dev": "electron .",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/broker.js && node --check src/renderer/app.js"
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/broker.js && node --check src/speech-text.js && node --check src/session-title.js && node --check src/renderer/app.js",
+    "validate-plugin": "claude plugin validate ./claude-plugin"
   },
   "devDependencies": {
     "electron": "45.1.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   }
 }
