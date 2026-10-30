@@ -75,8 +75,9 @@ Say 'Claude Code OK'
 
 Step 'Descargando AgentCall'
 if (Test-Path (Join-Path $Dir '.git')) {
-    & git.exe -C $Dir pull --ff-only --quiet
-    if ($LASTEXITCODE -ne 0) { Fail "No se pudo actualizar $Dir (git pull). Si lo has modificado, borralo y repite." }
+    & git.exe -C $Dir fetch --quiet --depth 1 origin $Branch
+    if ($LASTEXITCODE -eq 0) { & git.exe -C $Dir checkout --quiet -B $Branch FETCH_HEAD }
+    if ($LASTEXITCODE -ne 0) { Fail "No se pudo actualizar $Dir a la rama $Branch. Si lo has modificado, borralo y repite." }
     Say 'Actualizado'
 } else {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Dir) | Out-Null
@@ -86,17 +87,23 @@ if (Test-Path (Join-Path $Dir '.git')) {
 }
 
 Step 'Instalando la aplicacion (Electron)'
+# An open AgentCall from this folder locks electron.exe; close it (it is reopened at the end).
+$appDist = Join-Path $Dir 'node_modules\electron\dist'
+Get-CimInstance Win32_Process -Filter "Name='electron.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($appDist, [StringComparison]::OrdinalIgnoreCase) } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Milliseconds 800
 Push-Location $Dir
 try {
-    & npm.cmd install --no-audit --no-fund --loglevel=error | Out-Host
-    if ($LASTEXITCODE -ne 0) { Fail 'npm install ha fallado.' }
+    # npm ci: exact versions from package-lock.json and never rewrites it (keeps updates clean).
+    & npm.cmd ci --no-audit --no-fund --loglevel=error | Out-Host
+    if ($LASTEXITCODE -ne 0) { Fail 'npm ci ha fallado.' }
 } finally { Pop-Location }
 $electron = Join-Path $Dir 'node_modules\electron\dist\electron.exe'
-if (-not (Test-Path $electron)) {
-    # Electron 45+ downloads its binary on first run instead of at npm install time.
-    Say 'Descargando Electron...'
-    & node.exe (Join-Path $Dir 'node_modules\electron\install.js') | Out-Host
-}
+# Electron 45+ downloads its binary on first run instead of at npm install time. install.js skips the
+# download when dist\version already matches, so always running it also repairs a stale binary.
+Say 'Comprobando Electron...'
+& node.exe (Join-Path $Dir 'node_modules\electron\install.js') | Out-Host
 if (-not (Test-Path $electron)) { Fail 'Electron no se ha instalado correctamente.' }
 
 Step 'Reconocimiento de voz local (Whisper)'
@@ -140,7 +147,13 @@ if ($plugins -notmatch 'agentcall@better-call-claude') {
 }
 $commands = Join-Path $env:USERPROFILE '.claude\commands'
 New-Item -ItemType Directory -Force -Path $commands | Out-Null
-Copy-Item -Force (Join-Path $Dir 'claude-commands\saul.md') (Join-Path $commands 'saul.md')
+$saul = Join-Path $commands 'saul.md'
+if ((Test-Path $saul) -and -not (Select-String -Path $saul -Pattern 'AgentCall' -Quiet)) {
+    # Someone else's /saul command: keep a copy instead of silently replacing it.
+    Copy-Item -Force $saul "$saul.bak"
+    Say "Ya tenias un comando /saul: copia guardada en $saul.bak"
+}
+Copy-Item -Force (Join-Path $Dir 'claude-commands\saul.md') $saul
 Say 'Plugin agentcall y comando /saul instalados'
 
 Step 'Accesos directos'
