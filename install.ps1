@@ -62,11 +62,11 @@ if ($env:OS -ne 'Windows_NT') { Fail 'AgentCall solo funciona en Windows.' }
 
 Step 'Requisitos'
 Ensure-Tool 'Git' { Find-Exe @('git.exe') } 'Git.Git'
-Ensure-Tool 'Node.js' {
+Ensure-Tool 'Node.js 22.12+' {
     $node = Find-Exe @('node.exe')
     if (-not $node) { return $false }
-    $major = [int](((& $node --version) -replace '^v', '') -split '\.')[0]
-    return $major -ge 20
+    $parts = ((& $node --version) -replace '^v', '') -split '\.'
+    return ([int]$parts[0] -gt 22) -or ([int]$parts[0] -eq 22 -and [int]$parts[1] -ge 12)  # Electron 45 needs 22.12+
 } 'OpenJS.NodeJS.LTS'
 Ensure-Tool 'Python 3.11-3.13' { [bool](Find-Python) } 'Python.Python.3.12'
 $claude = Find-Exe @('claude.exe', 'claude.cmd')
@@ -92,6 +92,11 @@ try {
     if ($LASTEXITCODE -ne 0) { Fail 'npm install ha fallado.' }
 } finally { Pop-Location }
 $electron = Join-Path $Dir 'node_modules\electron\dist\electron.exe'
+if (-not (Test-Path $electron)) {
+    # Electron 45+ downloads its binary on first run instead of at npm install time.
+    Say 'Descargando Electron...'
+    & node.exe (Join-Path $Dir 'node_modules\electron\install.js') | Out-Host
+}
 if (-not (Test-Path $electron)) { Fail 'Electron no se ha instalado correctamente.' }
 
 Step 'Reconocimiento de voz local (Whisper)'
