@@ -398,3 +398,38 @@ test('the confirmation turn of /better-call-saul on does not ring', () => {
   assert.deepEqual(response, {});
   assert.ok(broker.receiveCompletion({ session_id: 'q1', last_assistant_message: 'Trabajo hecho.' }, { responder: () => {} }));
 });
+
+test('/saul is the short toggle; only exact arguments count', () => {
+  const broker = new CallBroker();
+  assert.match(broker.notePrompt({ session_id: 't1', prompt: '/saul on' }), /ACTIVADAS/);
+  assert.equal(broker.sessionMode('t1'), 'on');
+  assert.match(broker.notePrompt({ session_id: 't1', prompt: '/agentcall:saul off ' }), /DESACTIVADAS/);
+  assert.equal(broker.sessionMode('t1'), 'off');
+  assert.equal(broker.notePrompt({ session_id: 't1', prompt: '/saul only' }), null);
+  assert.equal(broker.notePrompt({ session_id: 't1', prompt: '/saulo on' }), null);
+  assert.equal(broker.sessionMode('t1'), 'off');
+  assert.match(broker.notePrompt({ session_id: 't1', prompt: '/better-call-saul' }), /DESACTIVADAS en esta/);
+});
+
+test('a toggle typed while a Stop is held releases it', () => {
+  let t = 100000;
+  const broker = new CallBroker({ defaultMode: 'on', now: () => t });
+  broker.notePrompt({ session_id: 'h1', prompt: 'haz algo largo' });
+  t = 200000;
+  let released;
+  broker.receiveCompletion({ session_id: 'h1', last_assistant_message: 'Terminado el trabajo largo.' }, { responder: b => { released = b; } });
+  assert.equal(released, undefined);
+  broker.notePrompt({ session_id: 'h1', prompt: '/saul status' });
+  assert.deepEqual(released, {});
+});
+
+test('session modes still in use are not evicted', () => {
+  const broker = new CallBroker();
+  broker.setSessionMode('keep', 'on');
+  for (let i = 0; i < 1200; i++) {
+    broker.setSessionMode('s' + i, 'on');
+    if (i % 100 === 0) broker.sessionMode('keep');
+  }
+  assert.equal(broker.sessionMode('keep'), 'on');
+  assert.ok(broker.sessionModes.size <= 1000);
+});

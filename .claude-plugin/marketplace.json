@@ -6,7 +6,7 @@
     {
       "name": "agentcall",
       "source": "./claude-plugin",
-      "description": "Voice calls for Claude Code questions, permissions and results. Per session: /better-call-saul on | off."
+      "description": "Voice calls for Claude Code questions, permissions and results. Per session: /saul on | off."
     }
   ]
 }

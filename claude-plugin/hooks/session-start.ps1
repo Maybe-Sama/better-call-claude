@@ -1,6 +1,6 @@
 # AgentCall SessionStart hook. Claude Code does not run HTTP hooks for SessionStart, so this forwards the
 # event to AgentCall, which answers with the call rules only when calls are ON for the session
-# (launcher sessions, or "/better-call-saul on"). AgentCall closed -> no output, Claude starts normally.
+# (launcher sessions, or "/saul on"). AgentCall closed -> no output, Claude starts normally.
 # Pure ASCII and \uXXXX output: Windows PowerShell 5.1 would otherwise corrupt accents.
 $ErrorActionPreference = 'SilentlyContinue'
 $payload = [Console]::In.ReadToEnd()

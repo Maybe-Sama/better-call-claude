@@ -1,5 +1,5 @@
 {
-  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Calls are per session: \"/better-call-saul on|off\". Every hook fails open when AgentCall is not running.",
+  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Calls are per session: \"/saul on|off\". Every hook fails open when AgentCall is not running.",
   "hooks": {
     "SessionStart": [
       {
@@ -54,7 +54,7 @@
             ],
             "onFailure": "continue",
             "timeout": 86400,
-            "statusMessage": "AgentCall: te está llamando con esta pregunta (escribe aquí si prefieres seguir en la terminal)"
+            "statusMessage": "AgentCall: si te llama, contesta en la llamada o aquí en la terminal"
           }
         ]
       }
@@ -73,7 +73,7 @@
             ],
             "onFailure": "continue",
             "timeout": 86400,
-            "statusMessage": "AgentCall: te está llamando para pedir permiso"
+            "statusMessage": "AgentCall: si te llama, decide en la llamada o aquí en la terminal"
           }
         ]
       }
@@ -110,7 +110,7 @@
             ],
             "onFailure": "continue",
             "timeout": 86400,
-            "statusMessage": "AgentCall: llamada de resultado en curso (escribe aquí para seguir en la terminal)"
+            "statusMessage": "AgentCall: si te llama, contesta en la llamada o escribe aquí"
           }
         ]
       }

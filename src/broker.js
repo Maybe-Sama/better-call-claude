@@ -16,10 +16,12 @@ const TITLE_CACHE_MS = 30_000;
 // did not exist (native terminal dialog for permissions/questions, normal stop for Stop).
 const NO_DECISION = Object.freeze({});
 
-// "/better-call-saul on|off" (user command) or "/agentcall:better-call-saul on|off" (plugin command).
-const TOGGLE_COMMAND = /^\s*\/(?:agentcall:)?better-call-saul\b\s*(on|off|status|estado)?/i;
+// "/saul on|off" (plugin command, also "/agentcall:saul"; "/better-call-saul" kept as an alias).
+// Exact command only: "/saul only" or "/saul foo" are not toggles.
+const TOGGLE_COMMAND = /^\s*\/(?:agentcall:)?(?:saul|better-call-saul)(?:\s+(on|off|status|estado))?\s*$/i;
+const MAX_SESSION_MODES = 1000;
 
-// Interaction rules Claude receives when calls are enabled for a session (SessionStart or "/better-call-saul on").
+// Interaction rules Claude receives when calls are enabled for a session (SessionStart or "/saul on").
 const CALL_RULES = `AgentCall is active for this session: the user supervises Claude Code from a Windows voice-call app.
 Questions, permission prompts and the final message of a turn are spoken aloud to the user in a phone-style call, in Spanish, and the user answers by voice, text or quick-answer buttons.
 
@@ -117,7 +119,7 @@ class CallBroker extends EventEmitter {
     this.sessions = new Map();
     this.activeId = null;
     this.dnd = false;
-    // Per-session on/off ("/better-call-saul"). Sessions without an explicit choice use the hint sent by the
+    // Per-session on/off ("/saul"). Sessions without an explicit choice use the hint sent by the
     // launcher (X-AgentCall-Mode header) or defaultMode.
     this.defaultMode = defaultMode === 'on' ? 'on' : 'off';
     this.sessionModes = new Map();
@@ -141,15 +143,22 @@ class CallBroker extends EventEmitter {
   // stale (the user chose the terminal), so release it and let Claude Code continue normally.
   // Is AgentCall enabled for this session? hint: value of the X-AgentCall-Mode header ("on"/"off"/"").
   sessionMode(sessionId, hint = '') {
-    if (sessionId && this.sessionModes.has(sessionId)) return this.sessionModes.get(sessionId);
+    if (sessionId && this.sessionModes.has(sessionId)) {
+      // Least-recently-used order: sessions still in use never reach the eviction end of the map.
+      const mode = this.sessionModes.get(sessionId);
+      this.sessionModes.delete(sessionId);
+      this.sessionModes.set(sessionId, mode);
+      return mode;
+    }
     if (hint === 'on' || hint === 'off') return hint;
     return this.defaultMode;
   }
 
   setSessionMode(sessionId, mode) {
     if (!sessionId) return;
+    this.sessionModes.delete(sessionId);
     this.sessionModes.set(sessionId, mode === 'on' ? 'on' : 'off');
-    if (this.sessionModes.size > 300) this.sessionModes.delete(this.sessionModes.keys().next().value);
+    if (this.sessionModes.size > MAX_SESSION_MODES) this.sessionModes.delete(this.sessionModes.keys().next().value);
     if (mode !== 'on') this._releaseSession(sessionId, null, 'Llamadas desactivadas para esta sesión.');
     this._changed('mode', { sessionId, mode });
   }
@@ -159,13 +168,15 @@ class CallBroker extends EventEmitter {
     return this.sessionMode(payload.session_id, hint) === 'on' ? CALL_RULES : null;
   }
 
-  // UserPromptSubmit. Returns additionalContext for Claude when the prompt is "/better-call-saul on|off".
+  // UserPromptSubmit. Returns additionalContext for Claude when the prompt is "/saul on|off".
   notePrompt(payload = {}, hint = '') {
     if (!payload.session_id) return null;
     const toggle = TOGGLE_COMMAND.exec(String(payload.prompt || ''));
     if (toggle) {
       const wanted = (toggle[1] || 'status').toLowerCase();
       this._session(payload).quietStop = true; // Claude's one-line confirmation is not a result worth a call
+      // Typing in the terminal supersedes anything still held for this session (as with any other prompt).
+      this._releaseSession(payload.session_id, null, 'Has seguido en la terminal; esta petición ya no está pendiente.');
       if (wanted === 'on' || wanted === 'off') this.setSessionMode(payload.session_id, wanted);
       const mode = this.sessionMode(payload.session_id, hint);
       if (wanted === 'on') return `AgentCall: llamadas ACTIVADAS para esta sesión.\n\n${CALL_RULES}`;

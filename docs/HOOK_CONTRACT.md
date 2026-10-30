@@ -16,6 +16,10 @@ These were checked empirically by driving the interactive TUI through ConPTY aga
 |---|---|
 | `type: "http"` hooks, `onFailure`, `statusMessage`, `timeout: 86400` | accepted; held requests work |
 | command hook with `args` (exec form) for SessionStart | works; `${CLAUDE_PLUGIN_ROOT}` expanded |
+| `type: "http"` hook for SessionStart | **skipped** ("HTTP hooks are not supported for SessionStart") → `session-start.ps1` forwards it |
+| http hook `headers` with `${AGENTCALL_SESSION_MODE}` + `allowedEnvVars` | expanded from the session's environment (empty when unset) → per-session `X-AgentCall-Mode` |
+| `UserPromptSubmit` for a slash command | `prompt` is the raw text typed (`/saul on`); `additionalContext` reaches the command's turn |
+| Plugin commands | namespaced: only `/agentcall:<name>` works; `/saul` unprefixed requires a personal command in `~/.claude/commands` |
 | PreToolUse `AskUserQuestion` → `permissionDecision: "allow"` + `updatedInput.answers` | answers the question, **no terminal dialog**; Claude sees `"question"="answer"` |
 | `answers` value that is not an option label (free text) | accepted like the terminal's "Other" field; Claude treats it as the user's words |
 | `AskUserQuestion` in `claude -p` | not available (interactive sessions only) |

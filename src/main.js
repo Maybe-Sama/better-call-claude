@@ -40,7 +40,7 @@ const PORT = numberSetting('AGENTCALL_PORT', 32147, 1024, 65535);
 const MIN_RESULT_MS = numberSetting('AGENTCALL_MIN_RESULT_SECONDS', MIN_RESULT_TURN_MS / 1000, 0, 3600) * 1000;
 const VERSION = require('../package.json').version;
 
-// Sessions call only after "/better-call-saul on", unless started by run-claude-with-agentcall.ps1
+// Sessions call only after "/saul on", unless started by run-claude-with-agentcall.ps1
 // (header X-AgentCall-Mode: on) or defaultMode is "on".
 const broker = new CallBroker({
   minResultMs: MIN_RESULT_MS,
@@ -273,7 +273,7 @@ async function routeHook(req, res) {
     case '/hooks/user-prompt-submit': {
       const context = broker.notePrompt(body, hint);
       if (!context) return jsonResponse(res, 200, {});
-      log(`/better-call-saul [${session}] → ${broker.sessionMode(body.session_id, hint)}`);
+      log(`/saul [${session}] → ${broker.sessionMode(body.session_id, hint)}`);
       return jsonResponse(res, 200, { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } });
     }
 
