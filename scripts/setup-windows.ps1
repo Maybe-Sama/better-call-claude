@@ -42,6 +42,9 @@ try {
     Write-Host "Instalando Whisper local (reconocimiento de voz offline)…" -ForegroundColor Yellow
     & "$PSScriptRoot\setup-whisper.ps1"
 
+    Write-Host "Instalando la voz de Claude (Edge + Kokoro)…" -ForegroundColor Yellow
+    & "$PSScriptRoot\setup-voice.ps1"
+
     Write-Host "Comprobando reconocimiento de voz de Windows…" -ForegroundColor Yellow
     & "$PSScriptRoot\check-speech.ps1"
 
