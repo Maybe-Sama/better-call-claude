@@ -104,7 +104,7 @@ $electron = Join-Path $Dir 'node_modules\electron\dist\electron.exe'
 # download when dist\version already matches, so always running it also repairs a stale binary.
 Say 'Comprobando Electron...'
 & node.exe (Join-Path $Dir 'node_modules\electron\install.js') | Out-Host
-if (-not (Test-Path $electron)) { Fail 'Electron no se ha instalado correctamente.' }
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $electron)) { Fail 'Electron no se ha instalado correctamente.' }
 
 Step 'Reconocimiento de voz local (Whisper)'
 if (-not (Run-Script (Join-Path $Dir 'scripts\setup-whisper.ps1'))) {
@@ -148,7 +148,7 @@ if ($plugins -notmatch 'agentcall@better-call-claude') {
 $commands = Join-Path $env:USERPROFILE '.claude\commands'
 New-Item -ItemType Directory -Force -Path $commands | Out-Null
 $saul = Join-Path $commands 'saul.md'
-if ((Test-Path $saul) -and -not (Select-String -Path $saul -Pattern 'AgentCall' -Quiet)) {
+if ((Test-Path $saul) -and -not (Select-String -Path $saul -Pattern 'agentcall-saul-command|El usuario ha escrito "/saul' -Quiet)) {
     # Someone else's /saul command: keep a copy instead of silently replacing it.
     Copy-Item -Force $saul "$saul.bak"
     Say "Ya tenias un comando /saul: copia guardada en $saul.bak"

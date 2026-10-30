@@ -1,20 +1,15 @@
 {
-  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Calls are per session: \"/saul on|off\". Every hook fails open when AgentCall is not running.",
+  "description": "AgentCall: turns Claude Code questions, permissions and final results into Windows voice calls. Calls are per session: \"/saul on|off\" (\"/saul on\" also opens AgentCall). With AgentCall closed every hook exits silently and Claude Code works as usual.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
+            "command": "node",
             "args": [
-              "-NoLogo",
-              "-NoProfile",
-              "-NonInteractive",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.ps1"
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "session-start"
             ],
             "timeout": 10
           }
@@ -25,16 +20,13 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:32147/hooks/user-prompt-submit",
-            "headers": {
-              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
-            },
-            "allowedEnvVars": [
-              "AGENTCALL_SESSION_MODE"
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "user-prompt-submit"
             ],
-            "onFailure": "continue",
-            "timeout": 3
+            "timeout": 40
           }
         ]
       }
@@ -44,15 +36,12 @@
         "matcher": "AskUserQuestion",
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:32147/hooks/ask-user",
-            "headers": {
-              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
-            },
-            "allowedEnvVars": [
-              "AGENTCALL_SESSION_MODE"
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "ask-user"
             ],
-            "onFailure": "continue",
             "timeout": 86400,
             "statusMessage": "AgentCall: si te llama, contesta en la llamada o aquí en la terminal"
           }
@@ -63,15 +52,12 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:32147/hooks/permission",
-            "headers": {
-              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
-            },
-            "allowedEnvVars": [
-              "AGENTCALL_SESSION_MODE"
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "permission"
             ],
-            "onFailure": "continue",
             "timeout": 86400,
             "statusMessage": "AgentCall: si te llama, decide en la llamada o aquí en la terminal"
           }
@@ -82,16 +68,13 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:32147/hooks/post-tool-use",
-            "headers": {
-              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
-            },
-            "allowedEnvVars": [
-              "AGENTCALL_SESSION_MODE"
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "post-tool-use"
             ],
-            "onFailure": "continue",
-            "timeout": 2
+            "timeout": 5
           }
         ]
       }
@@ -100,15 +83,12 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:32147/hooks/stop",
-            "headers": {
-              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
-            },
-            "allowedEnvVars": [
-              "AGENTCALL_SESSION_MODE"
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "stop"
             ],
-            "onFailure": "continue",
             "timeout": 86400,
             "statusMessage": "AgentCall: si te llama, contesta en la llamada o escribe aquí"
           }
@@ -119,16 +99,13 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:32147/hooks/stop-failure",
-            "headers": {
-              "X-AgentCall-Mode": "${AGENTCALL_SESSION_MODE}"
-            },
-            "allowedEnvVars": [
-              "AGENTCALL_SESSION_MODE"
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/agentcall-hook.js",
+              "stop-failure"
             ],
-            "onFailure": "continue",
-            "timeout": 3
+            "timeout": 5
           }
         ]
       }

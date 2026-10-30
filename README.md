@@ -54,8 +54,7 @@ Para actualizar, vuelve a ejecutar el mismo comando.
 
 ## Uso
 
-1. Abre **AgentCall** (acceso directo del escritorio). Se queda en una ventana pequeña esperando llamadas.
-2. En cualquier sesión **nueva** de Claude Code escribe:
+En cualquier sesión de Claude Code escribe:
 
 | Comando | Qué hace |
 | --- | --- |
@@ -63,7 +62,7 @@ Para actualizar, vuelve a ejecutar el mismo comando.
 | `/saul off` | Vuelve a ser una sesión normal de terminal. |
 | `/saul` | Te dice si las llamadas están activadas. |
 
-Las llamadas vienen **apagadas** en todas las sesiones: solo te llama la sesión en la que actives `/saul on`. Puedes tener una sesión que te llama y otras cinco en silencio.
+Si AgentCall está cerrado, `/saul on` lo abre solo (también tienes el acceso directo **AgentCall**). Las llamadas vienen **apagadas** en todas las sesiones: solo te llama la sesión en la que actives `/saul on`. Puedes tener una sesión que te llama y otras cinco en silencio.
 
 **Durante la llamada:**
 
@@ -89,7 +88,7 @@ flowchart LR
 - AgentCall retiene el hook mientras dura la llamada y devuelve tu respuesta a Claude Code. Al terminar un trabajo, lo que dices en la llamada vuelve a la misma sesión y Claude continúa.
 - **Reconocimiento**: Whisper local (CPU `small`, o `large-v3-turbo` en la GPU con DirectML).
 - **Voz**: Microsoft Edge neural (`es-ES-AlvaroNeural`, necesita internet); sin conexión usa Kokoro, local.
-- Todos los hooks fallan "abiertos": si AgentCall no responde, Claude Code sigue como si no existiera.
+- Con AgentCall cerrado los hooks no hacen nada (ni muestran errores) y Claude Code sigue como si no existiera.
 
 ## Privacidad
 
@@ -127,8 +126,8 @@ Opcional, en `%LOCALAPPDATA%\AgentCall\config.json`. Reinicia AgentCall tras cam
 
 | Qué pasa | Qué hacer |
 | --- | --- |
-| `/saul` dice que AgentCall no está abierto | Abre el acceso directo **AgentCall** y repite el comando. |
-| `Unknown command: /saul` | Abre una sesión nueva de Claude Code después de instalar. |
+| `/saul on` dice que AgentCall no está disponible | La sesión es anterior a la instalación: ciérrala y ábrela con `claude --continue` (sigue la misma conversación). |
+| `Unknown command: /saul` | Reinstala con el comando de instalación; crea `~/.claude/commands/saul.md`. |
 | No me entiende bien | Usa un micro cercano, ajusta `mic` y `micGain`, añade tus palabras a `vocab` o instala la versión GPU. |
 | Recoge ruidos o la tele | Baja `micGain` (p. ej. `0.5`) o sube `speechThreshold` (p. ej. `0.03`). |
 | No oigo nada | Revisa la salida de audio predeterminada de Windows. |

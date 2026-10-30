@@ -2,8 +2,11 @@
 
 Base URL: `http://127.0.0.1:32147`
 
-Every HTTP hook uses `"onFailure": "continue"`: if AgentCall is closed (connection refused), Claude Code
-reports a non-blocking error and behaves exactly as without the plugin.
+Every hook is a command hook, `node claude-plugin/hooks/agentcall-hook.js <endpoint>`, that forwards the
+payload to `/hooks/<endpoint>` and prints AgentCall's reply. If AgentCall is closed it exits silently and
+Claude Code behaves exactly as without the plugin (HTTP hooks would print "hook error ... ECONNREFUSED" on
+every prompt, tool call and turn). The one exception: `/saul on` with AgentCall closed starts it (from
+`%LOCALAPPDATA%\AgentCall\launch.json`, written by AgentCall at startup) and then forwards the prompt.
 
 A reply of `{}` always means "no decision": Claude Code continues natively (terminal permission dialog,
 terminal AskUserQuestion dialog, or a normal stop).
@@ -16,8 +19,10 @@ These were checked empirically by driving the interactive TUI through ConPTY aga
 |---|---|
 | `type: "http"` hooks, `onFailure`, `statusMessage`, `timeout: 86400` | accepted; held requests work |
 | command hook with `args` (exec form) for SessionStart | works; `${CLAUDE_PLUGIN_ROOT}` expanded |
-| `type: "http"` hook for SessionStart | **skipped** ("HTTP hooks are not supported for SessionStart") → `session-start.ps1` forwards it |
-| http hook `headers` with `${AGENTCALL_SESSION_MODE}` + `allowedEnvVars` | expanded from the session's environment (empty when unset) → per-session `X-AgentCall-Mode` |
+| `type: "http"` hook for SessionStart | **skipped** ("HTTP hooks are not supported for SessionStart") |
+| `type: "http"` hook with AgentCall closed | `onFailure: "continue"` still prints "hook error ... ECONNREFUSED" → replaced by command hooks |
+| Command hook process killed by Claude Code (new prompt while a held hook waits) | the bridge's connection closes → AgentCall drops the call ("Claude cerró la petición") |
+| `AGENTCALL_SESSION_MODE` in the session environment | inherited by command hooks; the bridge sends it as `X-AgentCall-Mode` |
 | `UserPromptSubmit` for a slash command | `prompt` is the raw text typed (`/saul on`); `additionalContext` reaches the command's turn |
 | Plugin commands | namespaced: only `/agentcall:<name>` works; `/saul` unprefixed requires a personal command in `~/.claude/commands` |
 | PreToolUse `AskUserQuestion` → `permissionDecision: "allow"` + `updatedInput.answers` | answers the question, **no terminal dialog**; Claude sees `"question"="answer"` |

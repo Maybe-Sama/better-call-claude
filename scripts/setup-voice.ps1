@@ -28,9 +28,9 @@ foreach ($f in @('kokoro-v1.0.onnx', 'voices-v1.0.bin')) {
     $dest = Join-Path $ModelDir $f
     Write-Host "Descargando la voz $f (solo la primera vez)..." -ForegroundColor Cyan
     # Download next to the target and rename only once complete.
-    & curl.exe -fL --retry 3 -o "$dest.part" "$release/$f"
-    if ($LASTEXITCODE -ne 0) { Remove-Item -Force "$dest.part" -ErrorAction SilentlyContinue; throw "download failed: $f" }
-    Move-Item -Force "$dest.part" $dest
+    & curl.exe -fL --retry 3 -o "$dest.$PID.part" "$release/$f"
+    if ($LASTEXITCODE -ne 0) { Remove-Item -Force "$dest.$PID.part" -ErrorAction SilentlyContinue; throw "download failed: $f" }
+    Move-Item -Force "$dest.$PID.part" $dest
 }
 
 & $py -c $check $onnx $voices

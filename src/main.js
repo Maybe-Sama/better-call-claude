@@ -331,7 +331,20 @@ function startHookServer() {
       : `No se pudo abrir el puerto ${PORT}: ${err.message}`;
     sendToRenderer('agentcall:service-error', message);
   });
-  server.listen(PORT, HOST, () => log(`Escuchando en http://${HOST}:${PORT}`));
+  server.listen(PORT, HOST, () => {
+    log(`Escuchando en http://${HOST}:${PORT}`);
+    rememberLaunchCommand();
+  });
+}
+
+// "/saul on" opens AgentCall when it is closed (claude-plugin/hooks/ensure-running.js); it starts the
+// copy that ran last, wherever it is installed.
+function rememberLaunchCommand() {
+  try {
+    fs.mkdirSync(AGENTCALL_DATA, { recursive: true });
+    fs.writeFileSync(path.join(AGENTCALL_DATA, 'launch.json'),
+      JSON.stringify({ electron: process.execPath, appDir: app.getAppPath() }, null, 2));
+  } catch (err) { log(`launch.json: ${err.message}`); }
 }
 
 // ── Speech recognition ───────────────────────────────────────────────────────
