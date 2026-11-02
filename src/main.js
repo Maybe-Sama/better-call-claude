@@ -818,25 +818,26 @@ function registerIpc() {
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
   // Controlled call: what the user was still saying (its transcript may be a second away) goes to Claude
   // before the call leaves. Hook calls keep their own hang-up path (the words go to the session's queue).
-  // A question or permission held by a hook call is answered by what the user just said, too. A result
-  // call keeps its own hang-up path (the words go to the session's queue).
-  const leaveCall = async (id, reason) => {
+  // A question or permission held by a hook call is answered by what the user just said, too, and so
+  // is anything put on hold (afterwards nothing could take it). Hanging up a result keeps its own path
+  // (the words go to the session's queue).
+  const leaveCall = async (id, reason, hold = false) => {
     const call = broker.calls.get(id);
     if (!call || id !== broker.activeId) return;
     const answering = Boolean(call.responder && !call.resolved && call.interactionKind !== 'stop');
-    if (!call.stream && !answering) return;
+    if (!call.stream && !answering && !hold) return;
     voice.leave();               // Claude goes quiet at once; what it had not said is kept
     await voice.settle(3500);    // the end of the phrase (0.7 s of silence) plus its transcript
     voice.flushDraft(reason);
   };
-  const leaveThen = async (id, reason, action) => {
-    await leaveCall(id, reason);
+  const leaveThen = async (id, reason, action, hold = false) => {
+    await leaveCall(id, reason, hold);
     const ok = action();
     if (broker.activeId === id) voice.cancelLeave(); // the call is still on: Claude may talk again
     return ok;
   };
   ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); return leaveThen(id, 'cuelgas', () => broker.hangup(id)); });
-  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); return leaveThen(id, 'pones la llamada en espera', () => broker.hold(id)); });
+  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); return leaveThen(id, 'pones la llamada en espera', () => broker.hold(id), true); });
   ipcMain.on('agentcall:tts-fallback', (_e, on) => { browserVoice = Boolean(on); syncEchoMode(); });
   ipcMain.handle('agentcall:dismiss', (_e, id) => { log('UI: terminar conversación'); return broker.dismiss(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });

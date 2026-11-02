@@ -358,8 +358,10 @@ class CallBroker extends EventEmitter {
     const session = this._session(payload);
     this._releaseSession(sessionId, null, null);
 
-    const active = this._active();
-    const sameActive = Boolean(active && active.sessionId === sessionId);
+    const current = this._active();
+    // The session's call the user put on hold takes it like the active one would (it does not ring).
+    const active = current && current.sessionId === sessionId ? current : this._heldCall(sessionId);
+    const sameActive = Boolean(active);
 
     // The user added something in the call while Claude worked and no tool call came to deliver it:
     // Claude continues with it right away instead of ending the turn (its result is shown, not read).
@@ -674,12 +676,13 @@ class CallBroker extends EventEmitter {
     this._changed();
   }
 
-  // "En espera": the user steps away from a controlled call (another call, a break) without ending it.
-  // Nothing closes and nothing rings: Claude goes on working, its prompts wait in the call, and the
-  // user picks it up again from the list (answer). A call waiting in the queue can ring meanwhile.
+  // "En espera": the user steps away from a call (another call, a break) without ending it. Nothing
+  // closes and nothing rings: a controlled Claude goes on working; a hook call keeps Claude waiting for
+  // the answer it holds. Whatever the session asks meanwhile goes into this call, and the user picks it
+  // up again from the list (answer). A call waiting in the queue can ring meanwhile.
   hold(id = this.activeId) {
     const call = this.calls.get(id);
-    if (!call?.stream || this.activeId !== id) return false;
+    if (!call || this.activeId !== id) return false;
     this.activeId = null;
     call.status = 'onhold';
     call.updatedAt = this.now();
@@ -701,7 +704,8 @@ class CallBroker extends EventEmitter {
   // (its controller closes the session). Anything Claude was waiting for is answered "no decision".
   dismiss(id) {
     const call = this.calls.get(id);
-    if (!call?.stream) return false;
+    if (!call) return false;
+    if (!call.stream) return this.hangup(id); // a hook call in the list: hanging it up (results end, questions wait)
     if (call.responder && !call.resolved) this._respond(call, NO_DECISION);
     if (this.activeId === id) this.activeId = null;
     this._deleteCall(id);
@@ -796,6 +800,13 @@ class CallBroker extends EventEmitter {
       this._changed('message', { id: active.id, message: fullMessage });
       return active;
     }
+    const held = this._heldCall(sessionId);
+    if (held) {
+      Object.assign(held, fields, { updatedAt: this.now() });
+      held.messages.push(fullMessage);
+      this._changed('message', { id: held.id, message: fullMessage });
+      return held;
+    }
     // A controlled conversation the user stepped away from: the prompt goes into that call. Hung up
     // while Claude worked, it rings; on hold, it waits there until the user picks the call up again.
     // Already ringing, queued or snoozed, it keeps going; in Pendientes, it rings for the new prompt.
@@ -856,6 +867,12 @@ class CallBroker extends EventEmitter {
       call.interactionKind = null;
       call.awaitingClaude = false;
       if (note) call.messages.push({ role: 'system', text: note, at: this.now(), kind: 'note' });
+      call.updatedAt = this.now();
+      this._changed('message', { id: call.id });
+    } else if (!call.stream && call.status === 'onhold') {
+      // On hold, the call stays for the user: Claude moved on, its next prompt or result comes into it.
+      call.interactionKind = null;
+      call.awaitingClaude = true;
       call.updatedAt = this.now();
       this._changed('message', { id: call.id });
     } else if (call.stream) {
@@ -958,6 +975,11 @@ class CallBroker extends EventEmitter {
 
   _ringing() {
     for (const call of this.calls.values()) if (call.status === 'ringing') return call;
+    return null;
+  }
+
+  _heldCall(sessionId) {
+    for (const call of this.calls.values()) if (!call.stream && call.status === 'onhold' && call.sessionId === sessionId) return call;
     return null;
   }
 

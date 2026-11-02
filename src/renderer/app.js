@@ -155,7 +155,7 @@ function renderActive(call) {
       </div>
       <div class="bottom-row">
         <div class="listen-state" id="listenState"><span class="level" aria-hidden="true"><span id="levelBar"></span></span><span id="listenText">${esc(callStatusText(call))}</span></div>
-        ${call.stream ? `<button id="holdBtn" class="secondary hold-btn" title="Claude sigue; vuelves desde la lista" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && leavingCall.hold ? 'Poniendo en espera…' : 'En espera'}</button>` : ''}
+        <button id="holdBtn" class="secondary hold-btn" title="${call.stream ? 'Claude sigue; vuelves desde la lista' : 'Claude espera tu respuesta; vuelves desde la lista'}" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && leavingCall.hold ? 'Poniendo en espera…' : 'En espera'}</button>
         <button id="hangupBtn" class="hangup" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && !leavingCall.hold ? 'Colgando…' : 'Colgar'}</button>
       </div>
     </div></section>`;
@@ -308,7 +308,7 @@ function renderDashboard() {
       const id = btn.dataset.endId;
       const call = state.calls.find(c => c.id === id);
       // Claude is working on it: a second press confirms (no dialog: it would block the window).
-      if (call?.awaitingClaude && !(armedEnd?.id === id && armedEnd.until > Date.now())) {
+      if (call?.stream && call.awaitingClaude && !(armedEnd?.id === id && armedEnd.until > Date.now())) {
         armedEnd = { id, until: Date.now() + 4000 };
         render();
         setTimeout(() => { if (armedEnd?.id === id) { armedEnd = null; render(); } }, 4100);
@@ -339,8 +339,9 @@ function callCardHtml(call) {
   if (call.sessionEnded) extra = 'la sesión de Claude se ha cerrado';
   // A conversation waiting in the list can be ended from there (Claude stops and its session closes).
   const armed = armedEnd?.id === call.id && armedEnd.until > Date.now();
-  const endLabel = call.sessionEnded ? 'Quitar' : armed ? '¿Detener a Claude? Pulsa otra vez' : 'Terminar';
-  const end = call.stream && (call.sessionEnded || ['onhold', 'parked', 'pending', 'ended'].includes(call.status))
+  const endLabel = !call.stream ? 'Colgar' : call.sessionEnded ? 'Quitar' : armed ? '¿Detener a Claude? Pulsa otra vez' : 'Terminar';
+  // A hook call on hold is hung up from its card (a result ends, a question waits in Pendientes).
+  const end = (!call.stream && call.status === 'onhold') || (call.stream && (call.sessionEnded || ['onhold', 'parked', 'pending', 'ended'].includes(call.status)))
     ? `<button class="card-end ${armed ? 'armed' : ''}" data-end-id="${esc(call.id)}" title="Terminar la conversación: Claude se detiene">${endLabel}</button>` : '';
   const back = call.status === 'parked' || call.status === 'onhold';
   const action = call.status === 'snoozed' || call.sessionEnded ? ''
