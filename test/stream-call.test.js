@@ -319,6 +319,62 @@ test('a hook call on hold rings with the result when Claude is done; never in th
   assert.equal(broker.getSnapshot().calls.find(x => x.id === c.id).status, 'ringing');
 });
 
+// ── Review round 4 ──────────────────────────────────────────────────────────────────────────
+
+test('a held hook call is over once the user goes on in the terminal; short replies never ring (#1)', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const answers = [];
+  const c = broker.receiveCompletion({ session_id: 'h1', cwd: 'C:/x', last_assistant_message: 'He terminado.', stop_hook_active: true }, { responder: (b) => { answers.push(b); return true; }, hint: 'on' });
+  broker.answer(c.id);
+  broker.hold(c.id);
+  broker.notePrompt({ session_id: 'h1', prompt: '¿qué hora es?' }, 'on'); // typed in the terminal
+  assert.equal(broker.getSnapshot().calls.length, 0, 'the held call is gone');
+  assert.equal(answers.length, 1, 'what it held was released');
+  const late = [];
+  broker.receiveCompletion({ session_id: 'h1', cwd: 'C:/x', last_assistant_message: 'Son las doce.' }, { responder: (b) => { late.push(b); return true; }, hint: 'on' });
+  assert.equal(broker.getSnapshot().calls.length, 0, 'a quick answer in the terminal does not ring');
+  assert.equal(late.length, 1);
+});
+
+test('a held hook call does not catch the confirmation of /saul (#1)', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const c = broker.receivePermission({ session_id: 'h2', cwd: 'C:/x', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(c.id);
+  broker.submitUserText(c.id, 'sí'); // Claude works
+  broker.hold(c.id);
+  broker.notePrompt({ session_id: 'h2', prompt: '/saul status' }, 'on');
+  const held = [];
+  broker.receiveCompletion({ session_id: 'h2', cwd: 'C:/x', last_assistant_message: 'Llamadas activadas.' }, { responder: (b) => { held.push(b); return true; }, hint: 'on' });
+  assert.equal(held.length, 1, 'answered at once, not held');
+  assert.equal(broker.getSnapshot().calls.length, 0);
+});
+
+test('a held hook call whose request Claude dropped is removed (#1)', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const c = broker.receivePermission({ session_id: 'h3', cwd: 'C:/x', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(c.id);
+  broker.hold(c.id);
+  broker.cancel(c.id); // answered in the terminal / Claude interrupted
+  assert.equal(broker.getSnapshot().calls.length, 0);
+});
+
+test('the queue rings in the order calls joined it (#10)', () => {
+  let now = 1000;
+  const broker = new CallBroker({ defaultMode: 'off', now: () => now });
+  const a = broker.receivePermission({ session_id: 'q1', cwd: 'C:/a', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(a.id);
+  broker.submitUserText(a.id, 'sí');
+  broker.hold(a.id); // created first, but not queued yet
+  const b = broker.receivePermission({ session_id: 'q2', cwd: 'C:/b', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(b.id);
+  now += 1000;
+  const c = broker.receivePermission({ session_id: 'q3', cwd: 'C:/c', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  now += 1000;
+  broker.receiveCompletion({ session_id: 'q1', cwd: 'C:/a', last_assistant_message: 'Hecho.', stop_hook_active: true }, { responder: () => true, hint: 'on' });
+  broker.hangup(b.id);
+  assert.equal(broker.getSnapshot().calls.find(x => x.id === c.id).status, 'ringing', 'queued earlier, rings first');
+});
+
 test('putting a hook call on hold lets another session\'s call ring', () => {
   const broker = new CallBroker({ defaultMode: 'off' });
   const a = broker.receivePermission({ session_id: 'sa', cwd: 'C:/a', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');

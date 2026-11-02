@@ -510,6 +510,33 @@ test('✕ after a noise cut Claude: Claude goes on', () => {
   assert.ok(streamed.some(s => s.id !== id && s.action === 'start'), 'Claude picks up again');
 });
 
+test('✕: what Claude was holding back while the user talked is said (round 4 #3)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ interactionKind: 'ask', messages: [assistant('¿Supabase o Neon?', 5)] }));
+  assert.equal(h.events('speak').length, 0, 'not over the user');
+  h.conv.discardDraft();
+  assert.deepEqual(h.events('speak').map(s => s.text), ['¿Supabase o Neon?']);
+});
+
+test('✕ never drops phrases of a restarted recognizer that reuse old ids (round 4 #4)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Ruido.', confidence: 0.6 });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 2, onset_ms: 90 });
+  h.conv.discardDraft();
+  h.conv.stt({ type: 'ready' }); // the worker restarted: ids from 1 again
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 2, onset_ms: 90 });
+  h.advance(900);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 2, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 2, text: 'Revisa el login.', confidence: 0.9 });
+  h.advance(10_000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Revisa el login.']);
+});
+
 test('without aec, the voice detector alone never stops Claude (it may be its own echo)', () => {
   const h = harness();
   h.conv.setCall(waitingCall());

@@ -683,7 +683,16 @@ voice.on('speak-stream', ({ id, action, text }) => {
   tts.send({ cmd: `stream-${action}`, id, text });
 });
 voice.on('append', ({ text }) => sendToRenderer('agentcall:voice', { cmd: 'append', text }));
-voice.on('unheard', ({ callId, text }) => streamCalls?.unheard(callId, text));
+// What Claude had not said when the user left a call is said when they pick it up again. A controlled
+// call catches up on it; a hook call says its last message again (a new revision of it).
+voice.on('unheard', ({ callId, text }) => {
+  const call = broker.calls.get(callId);
+  if (call?.stream) { streamCalls?.unheard(callId, text); return; }
+  const last = call && [...call.messages].reverse().find(m => m.role === 'assistant');
+  if (!last) return;
+  last.rev = (last.rev || 0) + 1;
+  broker.messagesChanged(callId);
+});
 voice.on('error', ({ message }) => sendToRenderer('agentcall:voice', { cmd: 'error', message }));
 voice.on('ui', snapshot => sendToRenderer('agentcall:voice-ui', snapshot));
 voice.on('local', ({ intent }) => log(`Voz: ${intent === 'resume' ? 'sigue donde lo dejó' : 'repite lo último'}`));
@@ -818,26 +827,22 @@ function registerIpc() {
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
   // Controlled call: what the user was still saying (its transcript may be a second away) goes to Claude
   // before the call leaves. Hook calls keep their own hang-up path (the words go to the session's queue).
-  // A question or permission held by a hook call is answered by what the user just said, too, and so
-  // is anything put on hold (afterwards nothing could take it). Hanging up a result keeps its own path
-  // (the words go to the session's queue).
-  const leaveCall = async (id, reason, hold = false) => {
-    const call = broker.calls.get(id);
-    if (!call || id !== broker.activeId) return;
-    const answering = Boolean(call.responder && !call.resolved && call.interactionKind !== 'stop');
-    if (!call.stream && !answering && !hold) return;
+  // Any call: what the user was still saying (its transcript may be seconds away) reaches Claude before
+  // the call leaves, as the answer to what Claude holds or as something for it to take into account.
+  const leaveCall = async (id, reason) => {
+    if (!broker.calls.has(id) || id !== broker.activeId) return;
     voice.leave();               // Claude goes quiet at once; what it had not said is kept
     await voice.settle(3500);    // the end of the phrase (0.7 s of silence) plus its transcript
     voice.flushDraft(reason);
   };
-  const leaveThen = async (id, reason, action, hold = false) => {
-    await leaveCall(id, reason, hold);
+  const leaveThen = async (id, reason, action) => {
+    await leaveCall(id, reason);
     const ok = action();
     if (broker.activeId === id) voice.cancelLeave(); // the call is still on: Claude may talk again
     return ok;
   };
   ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); return leaveThen(id, 'cuelgas', () => broker.hangup(id)); });
-  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); return leaveThen(id, 'pones la llamada en espera', () => broker.hold(id), true); });
+  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); return leaveThen(id, 'pones la llamada en espera', () => broker.hold(id)); });
   ipcMain.on('agentcall:tts-fallback', (_e, on) => { browserVoice = Boolean(on); syncEchoMode(); });
   ipcMain.handle('agentcall:dismiss', (_e, id) => { log('UI: terminar conversación'); return broker.dismiss(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });
@@ -853,7 +858,13 @@ function registerIpc() {
     return voice.submitTyped(text);
   });
   ipcMain.handle('agentcall:adopt-draft', () => voice.adoptDraft());
-  ipcMain.handle('agentcall:discard-draft', () => { log('UI: borrar lo escuchado'); voice.discardDraft(); return true; });
+  ipcMain.handle('agentcall:discard-draft', () => {
+    log('UI: borrar lo escuchado');
+    voice.discardDraft();
+    // The phrase in progress is cut in the recognizer too: words said after the ✕ start a new one.
+    if (stt?.listening) { stt.setListening(false); stt.setListening(true); }
+    return true;
+  });
   ipcMain.on('agentcall:set-typing', (_e, value) => voice.setTyping(value));
   ipcMain.on('agentcall:pcm', (_e, data) => stt?.writePcm(data));
   ipcMain.on('agentcall:capture-status', (_e, status) => onCaptureStatus(status));

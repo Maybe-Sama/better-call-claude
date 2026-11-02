@@ -179,7 +179,7 @@ class CallBroker extends EventEmitter {
     this.sessionModes.delete(sessionId);
     this.sessionModes.set(sessionId, mode === 'on' ? 'on' : 'off');
     if (this.sessionModes.size > MAX_SESSION_MODES) this.sessionModes.delete(this.sessionModes.keys().next().value);
-    if (mode !== 'on') this._releaseSession(sessionId, null, 'Llamadas desactivadas para esta sesión.');
+    if (mode !== 'on') { this._releaseSession(sessionId, null, 'Llamadas desactivadas para esta sesión.'); this._dropHeld(sessionId); }
     this._changed('mode', { sessionId, mode });
   }
 
@@ -197,6 +197,7 @@ class CallBroker extends EventEmitter {
       this._session(payload).quietStop = true; // Claude's one-line confirmation is not a result worth a call
       // Typing in the terminal supersedes anything still held for this session (as with any other prompt).
       this._releaseSession(payload.session_id, null, 'Has seguido en la terminal; esta petición ya no está pendiente.');
+      this._dropHeld(payload.session_id);
       if (wanted === 'on' || wanted === 'off') this.setSessionMode(payload.session_id, wanted);
       const mode = this.sessionMode(payload.session_id, hint);
       if (wanted === 'on') return `AgentCall: llamadas ACTIVADAS para esta sesión.\n\n${CALL_RULES}`;
@@ -212,6 +213,7 @@ class CallBroker extends EventEmitter {
     session.lastPromptAt = this.now();
     session.interacted = false;
     this._releaseSession(payload.session_id, null, 'Has seguido en la terminal; esta petición ya no está pendiente.');
+    this._dropHeld(payload.session_id); // the user chose the terminal: the held call is over
     // Anything said in a call and not delivered yet travels with this prompt.
     const pending = this.takePendingSpeech(payload.session_id);
     this._changed();
@@ -359,8 +361,10 @@ class CallBroker extends EventEmitter {
     this._releaseSession(sessionId, null, null);
 
     const current = this._active();
-    // The session's call the user put on hold takes it like the active one would (it does not ring).
-    const active = current && current.sessionId === sessionId ? current : this._heldCall(sessionId);
+    const live = Boolean(current && current.sessionId === sessionId);
+    // The session's call the user put on hold takes the result (and rings), but only a result that
+    // would have rung anyway: the filters below treat it like any call the user is not in.
+    const active = live ? current : this._heldCall(sessionId);
     const sameActive = Boolean(active);
 
     // The user added something in the call while Claude worked and no tool call came to deliver it:
@@ -380,10 +384,10 @@ class CallBroker extends EventEmitter {
 
     if (session.quietStop && !failure) {
       session.quietStop = false;
-      if (!sameActive) { responder?.(NO_DECISION); return null; }
+      if (!live) { responder?.(NO_DECISION); return null; }
     }
     const elapsed = session.lastPromptAt ? this.now() - session.lastPromptAt : Infinity;
-    if (!failure && !sameActive && !payload.stop_hook_active && !session.interacted && elapsed < this.minResultMs) {
+    if (!failure && !live && !payload.stop_hook_active && !session.interacted && elapsed < this.minResultMs) {
       responder?.(NO_DECISION);
       return null;
     }
@@ -435,6 +439,8 @@ class CallBroker extends EventEmitter {
     const call = this.calls.get(id);
     if (!call || call.resolved) return false;
     call.responder = null;
+    // On hold, nothing is left to come back for (answered in the terminal, Claude interrupted…).
+    if (!call.stream && call.status === 'onhold') { call.resolved = true; this._dropHeld(call.sessionId); return true; }
     this._release(call, 'Claude ya no espera esta respuesta (se resolvió o se interrumpió en la terminal).');
     return true;
   }
@@ -963,6 +969,7 @@ class CallBroker extends EventEmitter {
 
   _moveToQueued(call) {
     this._clearRingTimer(call.id);
+    if (call.status !== 'queued') call.queuedAt = this.now();
     call.status = 'queued';
     call.updatedAt = this.now();
     this._changed('queued', { id: call.id });
@@ -972,13 +979,26 @@ class CallBroker extends EventEmitter {
     if (this.dnd || this.activeId || this._ringing()) return;
     const next = [...this.calls.values()]
       .filter(c => c.status === 'queued')
-      .sort((a, b) => a.createdAt - b.createdAt)[0];
+      .sort((a, b) => (a.queuedAt ?? a.createdAt) - (b.queuedAt ?? b.createdAt))[0];
     if (next) this._startRinging(next);
   }
 
   _ringing() {
     for (const call of this.calls.values()) if (call.status === 'ringing') return call;
     return null;
+  }
+
+  // Hook calls on hold for a session the user has left (terminal, /saul off, Claude gave up): removed,
+  // anything they still held answered "no decision" (Claude Code then goes on in the terminal).
+  _dropHeld(sessionId) {
+    let dropped = false;
+    for (const call of [...this.calls.values()]) {
+      if (call.stream || call.status !== 'onhold' || call.sessionId !== sessionId) continue;
+      if (call.responder && !call.resolved) this._respond(call, NO_DECISION);
+      this._deleteCall(call.id);
+      dropped = true;
+    }
+    if (dropped) this._changed();
   }
 
   _heldCall(sessionId) {

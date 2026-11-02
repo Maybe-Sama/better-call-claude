@@ -161,7 +161,10 @@ function renderActive(call) {
     </div></section>`;
 
   // The caption is rewritten many times a second: one listener on it handles its ✕.
-  document.getElementById('liveCaption').onclick = (e) => { if (e.target.closest('[data-discard]')) discardHeard(); };
+  // On press, not on release: the caption may be rewritten in between and the release land elsewhere.
+  const caption = document.getElementById('liveCaption');
+  caption.onpointerdown = (e) => { if (e.button === 0 && e.target.closest('[data-discard]')) { e.preventDefault(); discardHeard(); } };
+  caption.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-discard]')) { e.preventDefault(); discardHeard(); } };
   let transcript = document.getElementById('transcript');
   if (keptTranscript) { transcript.replaceWith(keptTranscript); transcript = keptTranscript; }
   transcript.dataset.callId = call.id;
@@ -221,6 +224,7 @@ function renderActive(call) {
   input.onfocus = adoptVoiceDraft;
   input.onkeydown = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); send(); return; }
+    if (e.key === 'Escape') return; // Esc throws the spoken draft away (document handler), it never adopts it
     adoptVoiceDraft();
   };
   input.oninput = () => window.agentCall.setTyping(Boolean(input.value.trim()));

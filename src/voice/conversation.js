@@ -85,6 +85,7 @@ class VoiceConversation extends EventEmitter {
     this.holdTimer = null;
     this.echoCancelled = false; // microphone captured with acoustic echo cancellation
     this.phraseStarts = new Map(); // worker utterance id → when that phrase started
+    this.openPhrases = new Set();  // utterance ids begun whose transcript has not come yet
     this.ducked = false;
     this.bargeTimer = null;
     this._resetDraft();
@@ -147,6 +148,7 @@ class VoiceConversation extends EventEmitter {
       if (unheard) this.emit('unheard', { callId: this.call.id, text: unheard });
     }
     if (this.playing) this._stopTts();
+    if (this.pendingSpeak) this.emit('unheard', { callId: this.call.id, text: this.pendingSpeak });
     this.pendingSpeak = null;
     this.leaving = true;
     this._ui();
@@ -187,6 +189,8 @@ class VoiceConversation extends EventEmitter {
   listening() { return Boolean(this.call) && !this.muted; }
 
   stt(ev) {
+    if (ev.type === 'ready') { this.phraseStarts.clear(); this.openPhrases.clear(); this.discardedIds = null; return; }
+    if ((ev.type === 'final' || ev.type === 'rejected') && ev.utterance != null) this.openPhrases.delete(ev.utterance);
     if (!this.listening()) return;
     if (ev.type === 'speech' && ev.state === 'start') this._speechStart(ev);
     else if (ev.type === 'speech' && ev.state === 'end') this._speechEnd(ev);
@@ -256,6 +260,7 @@ class VoiceConversation extends EventEmitter {
     this.utterance = ev.utterance ?? null;
     this.phraseStartAt = this.speechStartAt; // kept across commits: decides whether a phrase can be echo
     if (ev.utterance != null) {
+      this.openPhrases.add(ev.utterance); // until its transcript (or its absence) is known
       this.phraseStarts.set(ev.utterance, this.speechStartAt); // a transcript is judged by its own phrase
       if (this.phraseStarts.size > 50) this.phraseStarts.delete(this.phraseStarts.keys().next().value);
     }
@@ -283,6 +288,7 @@ class VoiceConversation extends EventEmitter {
     this.speechEndAt = this.now() - (Number(ev.silence_ms) || 0);
     this._policy().speechEnd(this.now(), { expectFinal, silenceMs: Number(ev.silence_ms) || 0 });
     this._arm();
+    if (!expectFinal) this.openPhrases.delete(ev.utterance);
     if (!expectFinal && this._noiseCutBy(ev.utterance)) this._resumeAfterNoise(); // no transcript will come
     if (!this._draftText() && this.pendingSpeak) this._flushPendingSpeak();
     this._armHold();
@@ -639,10 +645,11 @@ class VoiceConversation extends EventEmitter {
   // nor does the phrase still being transcribed; what is said next starts a fresh turn. If those words
   // had cut Claude, Claude picks up again where it was.
   discardDraft() {
-    const inFlight = (this.policy?.pendingFinals || 0) + (this.userSpeaking ? 1 : 0);
+    const noVad = this.policy && !this.policy.vadEvents; // Windows dictation: a visible partial is a phrase in flight
+    const inFlight = (this.policy?.pendingFinals || 0) + (this.userSpeaking ? 1 : 0) + (noVad && this.partialText ? 1 : 0);
     this._resetDraft();
-    this.discardedIds = new Set(this.phraseStarts.keys()); // phrases begun so far (their transcripts may still come)
-    this.discardCount = inFlight;                          // engines without phrase ids: this many transcripts
+    this.discardedIds = new Set(this.openPhrases); // phrases begun and not transcribed yet
+    this.discardCount = inFlight;                  // engines without phrase ids: this many transcripts
     this._debug('borras lo escuchado');
     if (this.ducked || this.duckedFor !== undefined) this._releaseDuck(null);
     if (this.lastCut && this.interrupted === this.lastCut.interrupted && !this.playing) {
@@ -650,12 +657,18 @@ class VoiceConversation extends EventEmitter {
       this._resumeAfterNoise();
     }
     this.lastCut = null;
+    // Claude said something while the user was talking (kept until they finished): it is heard now.
+    if (this.pendingSpeak && !this.playing) this._flushPendingSpeak();
     this._ui();
   }
 
   // A transcript (or partial) of a phrase the user threw away with ✕.
   _discarded(ev) {
-    if (ev.utterance != null && this.discardedIds) return this.discardedIds.has(ev.utterance);
+    if (ev.utterance != null && this.discardedIds) {
+      const hit = this.discardedIds.has(ev.utterance);
+      if (hit && ev.type !== 'partial') this.discardedIds.delete(ev.utterance);
+      return hit;
+    }
     if (ev.utterance == null && this.discardCount > 0) {
       if (ev.type !== 'partial') this.discardCount -= 1;
       return true;
