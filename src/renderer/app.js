@@ -155,7 +155,7 @@ function renderActive(call) {
       </div>
       <div class="bottom-row">
         <div class="listen-state" id="listenState"><span class="level" aria-hidden="true"><span id="levelBar"></span></span><span id="listenText">${esc(callStatusText(call))}</span></div>
-        <button id="holdBtn" class="secondary hold-btn" title="${call.stream ? 'Claude sigue; vuelves desde la lista' : 'Claude espera tu respuesta; vuelves desde la lista'}" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && leavingCall.hold ? 'Poniendo en espera…' : 'En espera'}</button>
+        <button id="holdBtn" class="secondary hold-btn" title="${call.stream || call.awaitingClaude ? 'Claude sigue y te llama cuando acabe o te necesite' : 'Claude espera tu respuesta; vuelves desde la lista'}" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && leavingCall.hold ? 'Poniendo en espera…' : 'En espera'}</button>
         <button id="hangupBtn" class="hangup" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && !leavingCall.hold ? 'Colgando…' : 'Colgar'}</button>
       </div>
     </div></section>`;
@@ -349,7 +349,7 @@ function claudeState(call) {
   const asks = call.waiting && (call.interactionKind === 'permission' || call.interactionKind === 'ask');
   if (asks) return { key: 'needs', icon: '!', label: 'Te necesita', detail: call.interactionKind === 'permission' ? 'espera tu permiso' : 'tiene una pregunta' };
   if (call.type === 'error') return { key: 'needs', icon: '!', label: 'Se ha detenido', detail: 'por un error' };
-  if (call.awaitingClaude) return { key: 'working', icon: '', label: 'Trabajando', detail: call.status === 'parked' ? 'te llamará al terminar' : 'sigue con la tarea' };
+  if (call.awaitingClaude) return { key: 'working', icon: '', label: 'Trabajando', detail: call.status === 'parked' || call.status === 'onhold' ? 'te llamará al terminar' : 'sigue con la tarea' };
   if (call.status === 'ended') return { key: 'idle', icon: '–', label: 'Colgada', detail: 'puedes volver unos minutos' };
   return { key: 'ready', icon: '✓', label: 'Listo', detail: `terminó ${timeAgo(call.updatedAt)}` };
 }

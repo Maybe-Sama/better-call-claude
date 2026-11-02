@@ -217,7 +217,8 @@ test('a permission Claude needs while the user hung up rings with the question',
 });
 
 // "¿Cómo pongo la llamada en espera para irme a otra llamada sin cerrar y recuperar?"
-test('on hold: nothing closes, nothing rings, and picking it up again goes on', async () => {
+// "Falta que me llame cuando esté en listo": on hold it does not ring while Claude works, it does when done.
+test('on hold: nothing closes, it rings when Claude is done, and picking it up again goes on', async () => {
   const { broker, ctl, session } = setup();
   const call = await ctl.start({ cwd: 'C:/work/app' });
   ctl.say(call.id, 'Revisa el login.', 'queue');
@@ -232,10 +233,17 @@ test('on hold: nothing closes, nothing rings, and picking it up again goes on', 
   session.busy = false;
   session.emit('turn-end', { terminalReason: 'completed', aborted: false });
   const pub = broker.getSnapshot().calls[0];
-  assert.equal(pub.status, 'onhold', 'on hold never rings');
+  assert.equal(pub.status, 'ringing', 'Claude is done: it calls back');
   assert.equal(pub.messages.at(-1).speech, 'El login ya funciona.', 'heard on pick-up');
   assert.equal(broker.answer(call.id), true);
   assert.equal(ctl.say(call.id, 'Perfecto, súbelo.', 'queue').ok, true);
+  session.busy = true;
+  session.emit('turn-start');
+  broker.hold(call.id);
+  assert.equal(broker.getSnapshot().calls[0].status, 'onhold', 'no ring while Claude works');
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  broker.answer(call.id);
   // Idle Claude, on hold again: still nothing closes.
   broker.hold(call.id);
   await new Promise(r => setImmediate(r));
@@ -251,7 +259,7 @@ test('putting a call on hold lets a waiting call ring', async () => {
   assert.equal(broker.getSnapshot().calls.find(c => c.sessionId === 'other').status, 'ringing');
 });
 
-test('a prompt while on hold waits in that call without ringing', async () => {
+test('a prompt while on hold rings that same call', async () => {
   const { broker, ctl, session } = setup();
   const call = await ctl.start({ cwd: 'C:/work/app' });
   session.busy = true;
@@ -260,7 +268,7 @@ test('a prompt while on hold waits in that call without ringing', async () => {
   session.emit('permission', { requestId: 'p4', toolName: 'Bash', input: { command: 'npm test' } });
   const pub = broker.getSnapshot().calls;
   assert.equal(pub.length, 1);
-  assert.equal(pub[0].status, 'onhold');
+  assert.equal(pub[0].status, 'ringing');
   assert.equal(pub[0].interactionKind, 'permission');
   broker.answer(call.id);
   broker.submitUserText(call.id, 'sí');
@@ -282,7 +290,7 @@ test('a hook call on hold keeps Claude waiting for its answer, never rings, and 
   assert.equal(answers[0].hookSpecificOutput.decision.behavior, 'allow');
 });
 
-test('a hook call on hold: what the session asks next goes into it, without ringing', () => {
+test('a hook call on hold: what the session asks next goes into it and rings it', () => {
   const broker = new CallBroker({ defaultMode: 'off' });
   const c = broker.receivePermission({ session_id: 's8', cwd: 'C:/x', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
   broker.answer(c.id);
@@ -291,13 +299,24 @@ test('a hook call on hold: what the session asks next goes into it, without ring
   broker.receiveAskUser({ session_id: 's8', cwd: 'C:/x', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: '¿Supabase o Neon?', header: 'BD', options: [{ label: 'Supabase' }, { label: 'Neon' }], multiSelect: false }] } }, () => true, 'on');
   const calls = broker.getSnapshot().calls;
   assert.equal(calls.length, 1, 'no second call');
-  assert.equal(calls[0].status, 'onhold');
+  assert.equal(calls[0].status, 'ringing');
   assert.equal(calls[0].interactionKind, 'ask');
-  // And its result too.
-  broker.receiveCompletion({ session_id: 's8', cwd: 'C:/x', last_assistant_message: 'Listo, uso Neon.' }, { responder: () => true, hint: 'on' });
-  assert.equal(broker.getSnapshot().calls.length, 1);
-  assert.equal(broker.getSnapshot().calls[0].status, 'onhold');
-  assert.equal(broker.getSnapshot().calls[0].messages.at(-1).text, 'Listo, uso Neon.');
+});
+
+test('a hook call on hold rings with the result when Claude is done; never in the middle of another call', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const c = broker.receiveCompletion({ session_id: 's7', cwd: 'C:/x', last_assistant_message: 'He cambiado el logo.', stop_hook_active: true }, { responder: () => true, hint: 'on' });
+  broker.answer(c.id);
+  broker.submitUserText(c.id, 'Ahora ponlo en el pie también.'); // Claude works again
+  broker.hold(c.id);
+  const other = broker.receivePermission({ session_id: 'o1', cwd: 'C:/y', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(other.id); // the user is in another call
+  broker.receiveCompletion({ session_id: 's7', cwd: 'C:/x', last_assistant_message: 'Listo, también en el pie.' }, { responder: () => true, hint: 'on' });
+  const held = broker.getSnapshot().calls.find(x => x.id === c.id);
+  assert.equal(held.status, 'queued', 'waits for the other call to end');
+  assert.equal(held.messages.at(-1).text, 'Listo, también en el pie.');
+  broker.hangup(other.id);
+  assert.equal(broker.getSnapshot().calls.find(x => x.id === c.id).status, 'ringing');
 });
 
 test('putting a hook call on hold lets another session\'s call ring', () => {

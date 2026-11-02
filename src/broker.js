@@ -409,7 +409,8 @@ class CallBroker extends EventEmitter {
       active.detail = failure ? 'Error' : 'Resultado';
       active.updatedAt = this.now();
       if (failure) responder?.(NO_DECISION);
-      this._changed('message', { id: active.id, message });
+      if (active.status === 'onhold') this._enqueueOrRing(active); // done: the held call calls back
+      else this._changed('message', { id: active.id, message });
       return active;
     }
 
@@ -677,9 +678,10 @@ class CallBroker extends EventEmitter {
   }
 
   // "En espera": the user steps away from a call (another call, a break) without ending it. Nothing
-  // closes and nothing rings: a controlled Claude goes on working; a hook call keeps Claude waiting for
-  // the answer it holds. Whatever the session asks meanwhile goes into this call, and the user picks it
-  // up again from the list (answer). A call waiting in the queue can ring meanwhile.
+  // closes: a controlled Claude goes on working; a hook call keeps Claude waiting for the answer it
+  // holds. It does not ring while Claude works; when Claude is done or asks something, it calls back
+  // (queued behind the call the user is in, never over it). The user can also pick it up from the list.
+  // A call waiting in the queue can ring meanwhile.
   hold(id = this.activeId) {
     const call = this.calls.get(id);
     if (!call || this.activeId !== id) return false;
@@ -714,10 +716,11 @@ class CallBroker extends EventEmitter {
     return true;
   }
 
-  // A callback the user missed (Pendientes) rings again when Claude finishes something new.
+  // A callback the user missed (Pendientes) rings again when Claude finishes something new; a call on
+  // hold rings when Claude is done.
   ringStreamCall(callId) {
     const call = this.calls.get(callId);
-    if (!call?.stream || !['parked', 'pending'].includes(call.status)) return false;
+    if (!call?.stream || !['parked', 'pending', 'onhold'].includes(call.status)) return false;
     call.updatedAt = this.now();
     this._enqueueOrRing(call);
     return true;
@@ -804,17 +807,17 @@ class CallBroker extends EventEmitter {
     if (held) {
       Object.assign(held, fields, { updatedAt: this.now() });
       held.messages.push(fullMessage);
-      this._changed('message', { id: held.id, message: fullMessage });
+      this._enqueueOrRing(held); // Claude needs the user: the held call calls back
       return held;
     }
     // A controlled conversation the user stepped away from: the prompt goes into that call. Hung up
     // while Claude worked, it rings; on hold, it waits there until the user picks the call up again.
-    // Already ringing, queued or snoozed, it keeps going; in Pendientes, it rings for the new prompt.
+    // Already ringing, queued or snoozed, it keeps going; on hold or in Pendientes, it rings for it.
     const away = [...this.calls.values()].find(c => c.stream && c.sessionId === sessionId);
     if (away) {
       Object.assign(away, fields, { type: 'stream', updatedAt: this.now() });
       away.messages.push(fullMessage);
-      if (['parked', 'pending'].includes(away.status)) this._enqueueOrRing(away);
+      if (['parked', 'pending', 'onhold'].includes(away.status)) this._enqueueOrRing(away);
       else this._changed('message', { id: away.id, message: fullMessage });
       return away;
     }
