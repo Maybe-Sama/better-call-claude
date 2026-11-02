@@ -158,6 +158,7 @@ class StreamCallController extends EventEmitter {
       if (!this._onLine(callId) && last && (entry.missed.length || entry.msgMissed || entry.offline.length)) {
         last.silent = false;
         last.speech = toSpeech(last.text);
+        last.rev = (last.rev || 0) + 1;
         this.broker.messagesChanged(callId);
       }
       Object.assign(entry, { offline: [], msgMissed: false, missed: [], turnMsgs: [] });
@@ -190,10 +191,24 @@ class StreamCallController extends EventEmitter {
       entry.ended = true;
       entry.prompts = [];
       this.broker.setStreamBusy(callId, false);
+      this.broker.streamEnded(callId);
       this.broker.addCallMessage(callId, { role: 'system', text: 'La sesión de Claude se ha cerrado. Cuelga cuando quieras.', kind: 'note' });
       this.broker.ringStreamCall(callId); // hung up while it worked: the user should know
     });
     session.on('error', err => this.log(`Sesión controlada: ${err?.message || err}`));
+  }
+
+  // The user left the call while Claude was still saying something: the rest is caught up on (turn
+  // still running) or said when they pick the call up again.
+  unheard(callId, text) {
+    const entry = this.calls.get(callId);
+    if (!entry || !text) return;
+    if (entry.turnOpen) { entry.missed.push(text); return; }
+    const call = this.broker.calls.get(callId);
+    const last = call && [...call.messages].reverse().find(m => m.role === 'assistant');
+    if (!last) return;
+    Object.assign(last, { silent: false, speech: text, rev: (last.rev || 0) + 1 });
+    this.broker.messagesChanged(callId);
   }
 
   // Claude's sentences: spoken when someone is on the line, kept for the catch-up otherwise.
@@ -212,11 +227,14 @@ class StreamCallController extends EventEmitter {
   // did not hear and the part of the current one written meanwhile), then Claude goes on live.
   _catchUp(callId, entry) {
     if (!entry.turnOpen) return;
+    // A question is being asked in the call: it is not cut (what was missed went in front of it).
+    const call = this.broker.calls.get(callId);
+    if (call?.responder && !call.resolved) return;
     if (!entry.voiceTurn) {
       this.voice.streamTurnStart();
       entry.voiceTurn = true;
     }
-    const parts = [...entry.missed.slice(-1), ...entry.offline];
+    const parts = [...entry.missed.slice(-3), ...entry.offline];
     entry.missed = [];
     entry.offline = [];
     entry.msgMissed = false;
@@ -260,6 +278,16 @@ class StreamCallController extends EventEmitter {
     const handled = p.toolName === 'AskUserQuestion'
       ? this.broker.receiveAskUser(payload, responder, 'on')
       : this.broker.receivePermission(payload, responder, 'on');
+    if (handled && !this._onLine(callId)) {
+      // Nobody on the line: the question will be the first thing heard, so what Claude said before it
+      // (and nobody heard) goes in front of it rather than cutting it later.
+      const parts = [...entry.missed.slice(-3), ...entry.offline];
+      const msg = handled.messages?.at(-1);
+      if (parts.length && msg) {
+        msg.speech = `${parts.join(' ')} ${msg.speech || msg.text || ''}`.trim();
+        Object.assign(entry, { missed: [], offline: [], msgMissed: false });
+      }
+    }
     if (!handled) {
       // Never leave Claude waiting for an answer nobody can give.
       this.log(`Permiso ${p.toolName} sin llamada: denegado`);

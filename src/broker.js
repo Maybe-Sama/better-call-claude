@@ -689,6 +689,27 @@ class CallBroker extends EventEmitter {
   }
 
   // Claude finished (or stopped) while the user had hung up: it calls the user back.
+  // Claude's process is gone: the card says so instead of "Claude te espera".
+  streamEnded(callId) {
+    const call = this.calls.get(callId);
+    if (!call?.stream) return;
+    call.sessionEnded = true;
+    this._changed();
+  }
+
+  // "Terminar" on a controlled call in the list: the conversation ends now, whatever Claude is doing
+  // (its controller closes the session). Anything Claude was waiting for is answered "no decision".
+  dismiss(id) {
+    const call = this.calls.get(id);
+    if (!call?.stream) return false;
+    if (call.responder && !call.resolved) this._respond(call, NO_DECISION);
+    if (this.activeId === id) this.activeId = null;
+    this._deleteCall(id);
+    this._ringNextIfPossible();
+    this._changed('hangup', { id });
+    return true;
+  }
+
   // A callback the user missed (Pendientes) rings again when Claude finishes something new.
   ringStreamCall(callId) {
     const call = this.calls.get(callId);
@@ -959,6 +980,7 @@ class CallBroker extends EventEmitter {
       resolved: call.resolved,
       waiting: call.responder && !call.resolved ? true : Boolean(call.stream && !call.claudeBusy),
       stream: Boolean(call.stream),
+      sessionEnded: Boolean(call.sessionEnded),
       createdAt: call.createdAt,
       updatedAt: call.updatedAt,
       questionIndex: call.questionIndex || 0,

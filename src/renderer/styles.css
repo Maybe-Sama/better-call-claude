@@ -85,6 +85,9 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .bottom-row { margin-top: 9px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .listen-state { min-width: 0; flex: 1; font-size: 10px; color: var(--muted); }
 .hangup { border: 1px solid rgba(255,127,137,.2); background: rgba(255,127,137,.1); color: #ffadb4; border-radius: 11px; padding: 8px 13px; cursor: pointer; font-weight: 720; font-size: 11px; }
+.card-end { margin-left: 10px; border: 1px solid rgba(255,127,137,.25); background: transparent; color: #ffadb4; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 700; cursor: pointer; }
+.card-end:hover { background: rgba(255,127,137,.12); }
+.card-end:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .hold-btn { margin-left: auto; border-radius: 11px; padding: 8px 13px; cursor: pointer; font-weight: 720; font-size: 11px; }
 .hangup:hover { background: rgba(255,127,137,.15); }
 .dashboard { height: 100%; display: flex; flex-direction: column; padding: 22px 17px 17px; min-height: 0; }

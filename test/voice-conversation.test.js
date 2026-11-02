@@ -347,6 +347,9 @@ test('aec: a longer noise only lowers Claude for a moment', () => {
   h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
   h.advance(DUCK_AFTER_MS + 200);
   h.conv.stt({ type: 'speech', state: 'end', silence_ms: 60 });
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck'], 'low until its transcript says what it was');
+  h.advance(400);
+  h.conv.stt({ type: 'rejected' });
   h.advance(1000);
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'unduck']);
   assert.equal(h.conv.speaking(), true, 'Claude goes on');
@@ -360,6 +363,67 @@ test('aec: words while ducked stop Claude before the confirmation time', () => {
   h.advance(DUCK_AFTER_MS + 100);
   h.conv.stt({ type: 'partial', text: 'espera' });
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
+});
+
+test('aec: a short "para" keeps Claude low and its transcript stops it (review round 2 #6)', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 4, onset_ms: 90 });
+  h.advance(DUCK_AFTER_MS + 100);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 4, silence_ms: 700, voiced_ms: 450 });
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck']);
+  h.advance(500);
+  h.conv.stt({ type: 'final', utterance: 4, text: 'Para.', confidence: 0.9 });
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
+});
+
+test('aec: a lowered voice never stays low if the transcript does not come', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 5, onset_ms: 90 });
+  h.advance(DUCK_AFTER_MS + 100);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 5, silence_ms: 700, voiced_ms: 450 });
+  h.advance(3500);
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'unduck']);
+});
+
+test('answering Claude\'s question never mutes what it says next (review round 2 #1)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Necesito tu permiso para borrar la carpeta.');
+  h.say('Sí, adelante.');
+  h.conv.streamSentence('Hecho, la he borrado.');
+  assert.ok(streamed.some(s => s.action === 'append' && s.text === 'Hecho, la he borrado.'));
+});
+
+test('leaving a call mid-sentence hands back what Claude had not said yet (review round 2 #4)', () => {
+  const h = harness();
+  const unheard = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  h.conv.setCall(waitingCall({ messages: [assistant('He mirado el login. Falla la cookie. Lo arreglo ahora.')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'He mirado el login.' });
+  h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Falla la cookie.' });
+  h.conv.setCall(null);
+  assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.' }]);
+});
+
+test('settle waits for the transcript of what the user was saying (review round 2 #3)', async () => {
+  let now = 0;
+  const conv = new VoiceConversation({ now: () => now, setTimer: (fn, ms) => setTimeout(() => { now += ms; fn(); }, 1), clearTimer: id => clearTimeout(id) });
+  conv.setCall(waitingCall({ messages: [] }));
+  conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  let settled = false;
+  const done = conv.settle(1500).then(() => { settled = true; });
+  await new Promise(r => setTimeout(r, 5));
+  assert.equal(settled, false, 'the transcript is still coming');
+  conv.stt({ type: 'final', utterance: 1, text: 'Y luego súbelo.', confidence: 0.9 });
+  await done;
+  assert.equal(settled, true);
 });
 
 test('without aec, the voice detector alone never stops Claude (it may be its own echo)', () => {

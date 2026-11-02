@@ -395,6 +395,63 @@ test('a controlled call that opens while the user is in another call waits on ho
   assert.equal(broker.getSnapshot().calls.find(c => c.id === call.id).status, 'onhold');
 });
 
+// ── Review round 2 ──────────────────────────────────────────────────────────────────────────
+
+test('a callback with a question: what was missed goes before it, nothing cuts it (#1)', async () => {
+  const { broker, ctl, session, spoken } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  broker.hangup(call.id);
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: 'Voy a borrar la carpeta vieja. ' });
+  session.emit('assistant-message', { text: 'Voy a borrar la carpeta vieja.' });
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'rm -rf old' } });
+  const pub = broker.getSnapshot().calls[0];
+  assert.equal(pub.status, 'ringing');
+  assert.match(pub.messages.at(-1).speech, /^Voy a borrar la carpeta vieja\. /);
+  broker.answer(call.id);
+  await tick();
+  assert.deepEqual(spoken, [], 'no catch-up over the question');
+  broker.submitUserText(call.id, 'sí');
+  assert.equal(session.decisions[0].allow, true);
+  session.emit('assistant-start', { messageId: 'm2' });
+  session.emit('text', { delta: 'Hecho, la he borrado. Sigo. ' });
+  assert.deepEqual(spoken, ['Hecho, la he borrado.', 'Sigo.']);
+});
+
+test('what the voice had not said when the user left is said on picking up (#4)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.turn(['Falla la cookie. ', 'Lo arreglo ahora.']);
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'Lo arreglo ahora.');
+  const last = broker.getSnapshot().calls[0].messages.at(-1);
+  assert.equal(last.silent, false);
+  assert.equal(last.speech, 'Lo arreglo ahora.');
+  assert.equal(last.rev, 1, 'a new revision: the voice says it although it saw the message before');
+});
+
+test('"Terminar" ends a conversation from the list, even while Claude works (#5)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  broker.setStreamBusy(call.id, true);
+  broker.hold(call.id);
+  assert.equal(broker.dismiss(call.id), true);
+  await tick();
+  assert.equal(session.closed, true);
+  assert.equal(broker.getSnapshot().calls.length, 0);
+});
+
+test('the card knows when Claude\'s session is gone (#5)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  broker.hold(call.id);
+  session.emit('exit', { code: 1 });
+  assert.equal(broker.getSnapshot().calls[0].sessionEnded, true);
+});
+
 test('hanging up with a prompt unanswered keeps it in Pendientes (Claude waits for it)', async () => {
   const { broker, ctl, session } = setup();
   const call = await ctl.start({ cwd: 'C:/work/app' });

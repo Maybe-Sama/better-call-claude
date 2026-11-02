@@ -121,7 +121,7 @@ Opcional, en `%LOCALAPPDATA%\AgentCall\config.json`. Reinicia AgentCall tras cam
 | `vocab` | Palabras que deberían entenderse bien: nombres de proyectos, librerías… |
 | `defaultMode` | `on` para que **todas** las sesiones llamen sin `/saul on`. |
 | `minResultSeconds` | Duración mínima de un turno para llamarte al terminar (por defecto 20 s). |
-| `capture` | `aec`: el micrófono pasa por la cancelación de eco de Chromium, así puedes interrumpir a Claude al instante aunque uses altavoces. `device` (por defecto): Whisper abre el micrófono directamente. |
+| `capture` | `aec` (por defecto): el micrófono pasa por la cancelación de eco de Chromium, así Claude no se oye a sí mismo aunque uses altavoces y puedes interrumpirle. `device`: Whisper abre el micrófono directamente, sin cancelación de eco (se usa solo si la otra falla). |
 | `voiceMetrics` | `true` guarda en `voice-metrics.jsonl` las latencias de la voz (solo tiempos, nunca lo que se dice). Ctrl+Mayús+L en la llamada las muestra en vivo. |
 
 ## Problemas frecuentes

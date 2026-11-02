@@ -384,7 +384,10 @@ let whisperUnavailable = !['auto', 'whisper'].includes(STT_ENGINE) || !(fs.exist
 let winrtExe = null;
 // "aec": the window captures the microphone with Chromium echo cancellation and streams it to Whisper
 // (--source stdin); "device" (default): Whisper opens the microphone itself. aec falls back to device.
-let captureMode = (process.env.AGENTCALL_CAPTURE || 'device').toLowerCase() === 'aec' ? 'aec' : 'device';
+// Echo-cancelled capture by default: measured 2026-11-02, Claude's voice at full volume next to the mic
+// drops ~43 dB (below the room's silence) and a 45 s answer never cut itself. 'device' (Whisper opens the
+// mic itself, no echo cancellation) remains as the fallback when the window cannot capture.
+let captureMode = (process.env.AGENTCALL_CAPTURE || 'aec').toLowerCase() === 'device' ? 'device' : 'aec';
 let captureOn = false;
 let winrtUnavailable = !['auto', 'winrt'].includes(STT_ENGINE);
 
@@ -680,6 +683,7 @@ voice.on('speak-stream', ({ id, action, text }) => {
   tts.send({ cmd: `stream-${action}`, id, text });
 });
 voice.on('append', ({ text }) => sendToRenderer('agentcall:voice', { cmd: 'append', text }));
+voice.on('unheard', ({ callId, text }) => streamCalls?.unheard(callId, text));
 voice.on('error', ({ message }) => sendToRenderer('agentcall:voice', { cmd: 'error', message }));
 voice.on('ui', snapshot => sendToRenderer('agentcall:voice-ui', snapshot));
 voice.on('local', ({ intent }) => log(`Voz: ${intent === 'resume' ? 'sigue donde lo dejó' : 'repite lo último'}`));
@@ -809,9 +813,16 @@ function registerIpc() {
   ipcMain.handle('agentcall:get-state', () => broker.getSnapshot());
   ipcMain.handle('agentcall:answer', (_e, id) => { log('UI: contestar'); return broker.answer(id); });
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
-  // What the user already said goes to Claude before the call is gone (after it there is nothing to route it).
-  ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); if (id === broker.activeId) voice.flushDraft('cuelgas'); return broker.hangup(id); });
-  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); if (id === broker.activeId) voice.flushDraft('pones la llamada en espera'); return broker.hold(id); });
+  // Controlled call: what the user was still saying (its transcript may be a second away) goes to Claude
+  // before the call leaves. Hook calls keep their own hang-up path (the words go to the session's queue).
+  const leaveStream = async (id, reason) => {
+    if (!broker.calls.get(id)?.stream || id !== broker.activeId) return;
+    await voice.settle(1500);
+    voice.flushDraft(reason);
+  };
+  ipcMain.handle('agentcall:hangup', async (_e, id) => { log('UI: colgar'); await leaveStream(id, 'cuelgas'); return broker.hangup(id); });
+  ipcMain.handle('agentcall:hold', async (_e, id) => { log('UI: en espera'); await leaveStream(id, 'pones la llamada en espera'); return broker.hold(id); });
+  ipcMain.handle('agentcall:dismiss', (_e, id) => { log('UI: terminar conversación'); return broker.dismiss(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });
   ipcMain.handle('agentcall:submit-choice', (_e, { id, choice }) => {
     log(`UI: botón ${Array.isArray(choice) ? choice.join(' + ') : choice}`);

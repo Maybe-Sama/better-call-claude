@@ -28,6 +28,7 @@ const MIN_CONFIDENCE = 0.4;    // below this, recognitions are noise/echo guesse
 // 2026-11-02: stopping at 250 ms cut Claude 20 times in four minutes, each time restarting the sentence.
 const DUCK_AFTER_MS = 300;
 const BARGE_CONFIRM_MS = 1500;
+const DUCK_HOLD_MS = 3000; // longest wait for the transcript of a phrase that lowered Claude
 const ACK_TEXT = { vale: 'Vale.', entendido: 'Entendido.', momento: 'Un momento.' };
 
 function fold(text) {
@@ -99,7 +100,12 @@ class VoiceConversation extends EventEmitter {
     if ((call?.id || null) !== previous && this.call) this._flushDraft('la llamada ha terminado'); // to the call/session it belonged to
     this.call = call || null;
     if ((call?.id || null) !== previous) {
-      // Another call (or none): nothing of the previous one may keep playing or count as echo.
+      // Another call (or none): nothing of the previous one may keep playing or count as echo. What
+      // Claude had not said yet is handed back, so it can be heard when the user picks that call up.
+      if (this.playing && !this.playing.ack && previous) {
+        const unheard = this._remainder(this.playing);
+        if (unheard) this.emit('unheard', { callId: previous, text: unheard });
+      }
       if (this.playing) this._stopTts();
       this._resetDraft();
       this.interrupted = null;
@@ -128,6 +134,18 @@ class VoiceConversation extends EventEmitter {
 
   // Recognised words still waiting for the end of the turn are sent now instead of being dropped
   // (hang-up, another call, mute). An unfinished partial is not: it was never a confirmed transcript.
+  // Resolves once the user is not mid-phrase and no transcript is still coming (or after `ms`): what
+  // they said just before hanging up is then in the draft and can be flushed.
+  settle(ms = 1500) {
+    const pending = () => this.userSpeaking || Boolean(this.partialText) || (this.policy?.pendingFinals || 0) > 0;
+    if (!pending()) return Promise.resolve();
+    const start = this.now();
+    return new Promise((resolve) => {
+      const check = () => { if (!pending() || this.now() - start >= ms) resolve(); else this.setTimer(check, 100); };
+      this.setTimer(check, 100);
+    });
+  }
+
   // The user is about to hang up or step away: what they already said goes to Claude first, while the
   // call still exists (after the hang-up there is no call left to route it through).
   flushDraft(reason = 'cuelgas') {
@@ -225,18 +243,15 @@ class VoiceConversation extends EventEmitter {
 
   _speechEnd(ev) {
     this.userSpeaking = false;
+    const expectFinal = !ev.cancelled && (ev.voiced_ms == null || ev.voiced_ms >= MIN_TRANSCRIBED_MS);
     if (this.bargeTimer) {
-      // Too short to be someone talking (cough, knock): Claude goes on at full volume.
       this._clearBargeTimer();
-      if (this.ducked) {
-        this.ducked = false;
-        this.emit('tts', { action: 'unduck' });
-        this.emit('failure', 'false_speech_start');
-        this._debug('ruido breve: Claude sigue hablando');
-      }
+      // A short "para" that lowered Claude stays lowered until its transcript says whether it was words
+      // (any word then stops Claude); a sound that will not be transcribed restores the volume now.
+      if (this.ducked && expectFinal) this._holdDuck(ev.utterance);
+      else this._releaseDuck('ruido breve: Claude sigue hablando');
     }
     this.speechEndAt = this.now() - (Number(ev.silence_ms) || 0);
-    const expectFinal = !ev.cancelled && (ev.voiced_ms == null || ev.voiced_ms >= MIN_TRANSCRIBED_MS);
     this._policy().speechEnd(this.now(), { expectFinal, silenceMs: Number(ev.silence_ms) || 0 });
     this._arm();
     if (!expectFinal && this._noiseCutBy(ev.utterance)) this._resumeAfterNoise(); // no transcript will come
@@ -268,6 +283,7 @@ class VoiceConversation extends EventEmitter {
       this._arm();
       this._armHold();
       if (this._noiseCutBy(utterance)) this._resumeAfterNoise();
+      if (this.duckedFor !== undefined && (this.duckedFor == null || utterance == null || this.duckedFor === utterance)) this._releaseDuck('no eran palabras: Claude sigue');
       return;
     }
     this.lowConfidence = false;
@@ -290,7 +306,7 @@ class VoiceConversation extends EventEmitter {
   _maybeSpeak(call) {
     const latest = [...(call.messages || [])].reverse().find(m => m.role === 'assistant');
     if (!latest) return;
-    const key = `${call.id}:${latest.at}`;
+    const key = `${call.id}:${latest.at}:${latest.rev || 0}`; // rev: to be said (again) after the user missed it
     if (this.spokenKeys.has(key)) return;
     this.spokenKeys.add(key);
     if (this.spokenKeys.size > 500) this.spokenKeys.delete(this.spokenKeys.values().next().value);
@@ -373,14 +389,35 @@ class VoiceConversation extends EventEmitter {
     this.duckTimer = null;
   }
 
+  _holdDuck(utterance) {
+    this.duckedFor = utterance ?? null;
+    if (this.duckHoldTimer) this.clearTimer(this.duckHoldTimer);
+    // Never stays low if the transcript does not come.
+    this.duckHoldTimer = this.setTimer(() => { this.duckHoldTimer = null; this._releaseDuck('sin transcripción: Claude sigue'); }, DUCK_HOLD_MS);
+  }
+
+  _releaseDuck(why) {
+    if (this.duckHoldTimer) this.clearTimer(this.duckHoldTimer);
+    this.duckHoldTimer = null;
+    this.duckedFor = undefined;
+    if (!this.ducked) return;
+    this.ducked = false;
+    this.emit('tts', { action: 'unduck' });
+    this.emit('failure', 'false_speech_start');
+    if (why) this._debug(why);
+  }
+
   _bargeIn(reason) {
     this._clearBargeTimer();
+    if (this.duckHoldTimer) this.clearTimer(this.duckHoldTimer);
+    this.duckHoldTimer = null;
+    this.duckedFor = undefined;
     this.ducked = false;
     if (!this.playing) return;
     this._debug(`interrumpe a Claude (${reason})`);
     if (this.speechStartAt) this._metric('bargein.stop_ms', this.now() - this.speechStartAt);
     if (!this.playing.ack) this.interrupted = { ...this.playing, chunks: new Map(this.playing.chunks) };
-    if (this.playing.streaming) this.streamCut = true;
+    if (this.playing.streaming && this.kind !== 'permission' && this.kind !== 'ask') this.streamCut = true;
     // Until the phrase that cut Claude turns out to have words, the cut may be a click or a key.
     this.noiseCut = reason === 'final' || !this.interrupted ? null
       : { interrupted: this.interrupted, utterance: this.utterance, streaming: Boolean(this.playing.streaming) };

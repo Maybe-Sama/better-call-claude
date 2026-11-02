@@ -142,7 +142,7 @@ function renderActive(call) {
       <div class="status-pill ${call.awaitingClaude ? 'working' : ''}"><span id="callClock">00:00</span></div>
     </div>
     ${queued ? `<div class="queue-strip">☎ ${queued} ${queued === 1 ? 'llamada esperando' : 'llamadas esperando'} en cola</div>` : ''}
-    <div class="transcript" id="transcript" aria-live="polite"></div>
+    <div class="transcript" id="transcript" role="log" aria-live="polite"></div>
     ${quickAnswersHtml(call)}
     <div class="live-caption" id="liveCaption">${liveCaptionHtml(call)}</div>
     <div class="call-controls">
@@ -161,13 +161,17 @@ function renderActive(call) {
   let transcript = document.getElementById('transcript');
   if (keptTranscript) { transcript.replaceWith(keptTranscript); transcript = keptTranscript; }
   transcript.dataset.callId = call.id;
-  const html = call.messages.map(messageHtml).join('');
-  const shown = transcriptHtml.get(transcript) || '';
-  if (html !== shown) {
-    if (shown && html.startsWith(shown)) transcript.insertAdjacentHTML('beforeend', html.slice(shown.length));
-    else transcript.innerHTML = html;
-    transcriptHtml.set(transcript, html);
+  // Only what changed is touched (a message marked delivered, a new one), so a screen reader hears
+  // that and not the whole conversation again. One element per message.
+  const parts = call.messages.map(messageHtml);
+  const shown = transcriptHtml.get(transcript) || [];
+  if (parts.length < shown.length || transcript.children.length !== shown.length) {
+    transcript.innerHTML = parts.join('');
+  } else {
+    for (let i = 0; i < shown.length; i += 1) if (parts[i] !== shown[i]) transcript.children[i].outerHTML = parts[i];
+    if (parts.length > shown.length) transcript.insertAdjacentHTML('beforeend', parts.slice(shown.length).join(''));
   }
+  transcriptHtml.set(transcript, parts);
   transcript.scrollTop = atBottom ? transcript.scrollHeight : readingAt;
   updateClock();
   updateLevel();
@@ -291,6 +295,10 @@ function renderDashboard() {
     const again = document.getElementById('callClaudeBtn');
     if (again) { again.disabled = false; again.textContent = 'Llamar a Claude'; }
   };
+  main.querySelectorAll('[data-end-id]').forEach(btn => {
+    btn.onclick = async (e) => { e.stopPropagation(); await window.agentCall.dismiss(btn.dataset.endId); };
+    btn.onkeydown = (e) => e.stopPropagation(); // Enter here is "Terminar", not "Volver a la llamada"
+  });
   main.querySelectorAll('[data-call-id]').forEach(card => {
     const callBack = async () => {
       const call = state.calls.find(c => c.id === card.dataset.callId);
@@ -310,13 +318,17 @@ function callCardHtml(call) {
   // On hold nothing rings: the card says what Claude is doing so the user knows when to come back.
   if (call.status === 'onhold') extra = call.interactionKind === 'permission' || call.interactionKind === 'ask' ? 'Claude te necesita' : call.awaitingClaude ? 'Claude sigue trabajando' : 'Claude te espera';
   if (call.status === 'ended') extra = 'puedes volver unos minutos';
+  if (call.sessionEnded) extra = 'la sesión de Claude se ha cerrado';
+  // A conversation waiting in the list can be ended from there (Claude stops and its session closes).
+  const end = call.stream && ['onhold', 'parked', 'pending', 'ended'].includes(call.status)
+    ? `<button class="card-end" data-end-id="${esc(call.id)}" title="Terminar la conversación: Claude se detiene">Terminar</button>` : '';
   const back = call.status === 'parked' || call.status === 'onhold';
   const action = call.status === 'snoozed' ? '' : `<span class="card-action">${back ? 'Volver a la llamada' : call.status === 'ended' ? 'Volver a llamar' : 'Devolver llamada'} →</span>`;
   const interactive = call.status !== 'snoozed' ? 'role="button" tabindex="0"' : 'aria-disabled="true"';
   return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}" ${interactive}>
     <div class="card-top"><div class="card-title">${esc(call.title)}</div><div class="card-status">${esc(statusLabel(call.status))}</div></div>
     <div class="card-context">${esc(call.context)}</div>
-    <div class="card-time">${esc(callLabel(call))}${call.detail ? ` · ${esc(call.detail)}` : ''} · ${esc(extra)}${action}</div>
+    <div class="card-time">${esc(callLabel(call))}${call.detail ? ` · ${esc(call.detail)}` : ''} · ${esc(extra)}${action}${end}</div>
   </article>`;
 }
 
