@@ -550,3 +550,44 @@ test('the call rules ask for speech that sounds like a phone call, only when cal
     assert.match(rules, cue);
   }
 });
+
+// ── Controlled sessions (Voice First §6): the user calls Claude from AgentCall ─────────────────
+
+test('a controlled call opens active, waits for the user when Claude is idle and works when busy', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  broker.setDnd(true); // the user is calling: DND does not apply
+  const call = broker.openStreamCall({ sessionId: 'st1', cwd: 'C:/work/app', title: 'app' });
+  let pub = broker.getSnapshot().calls[0];
+  assert.equal(broker.activeId, call.id);
+  assert.equal(pub.status, 'active');
+  assert.equal(pub.stream, true);
+  assert.equal(pub.waiting, true);
+  assert.equal(pub.interactionKind, 'stop');
+  broker.setStreamBusy(call.id, true);
+  pub = broker.getSnapshot().calls[0];
+  assert.equal(pub.waiting, false);
+  assert.equal(pub.awaitingClaude, true);
+  broker.addCallMessage(call.id, { role: 'assistant', text: 'Hecho.', silent: true });
+  assert.equal(broker.getSnapshot().calls[0].messages.at(-1).text, 'Hecho.');
+});
+
+test('a permission inside a controlled call merges into it and resolves through its responder', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const call = broker.openStreamCall({ sessionId: 'st2', cwd: 'C:/work/app', title: 'app' });
+  broker.setStreamBusy(call.id, true);
+  let decision;
+  const merged = broker.receivePermission({ session_id: 'st2', tool_name: 'Bash', tool_input: { command: 'rm -rf build' } }, body => { decision = body; return true; }, 'on');
+  assert.equal(merged.id, call.id);
+  assert.equal(broker.getSnapshot().calls[0].waiting, true);
+  broker.submitUserText(call.id, 'sí');
+  assert.equal(decision.hookSpecificOutput.decision.behavior, 'allow');
+  assert.equal(broker.getSnapshot().calls[0].awaitingClaude, true, 'Claude goes on working');
+});
+
+test('hanging up a controlled call removes it', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const call = broker.openStreamCall({ sessionId: 'st3', cwd: 'C:/work/app', title: 'app' });
+  broker.hangup(call.id);
+  assert.equal(broker.getSnapshot().calls.length, 0);
+  assert.equal(broker.activeId, null);
+});

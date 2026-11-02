@@ -400,3 +400,61 @@ test('a phrase transcribed while typing goes to the box and does not leave the t
   assert.deepEqual(appended, ['y el plan gratuito']);
   assert.deepEqual(h.events('commit').map(c => c.text), ['Haz el cambio.']);
 });
+
+// ── Streamed answers (controlled session): Claude talks while it writes ─────────────────────
+
+test('stream: sentences are spoken as they arrive, in one utterance', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(waitingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Google funciona.');
+  h.conv.streamSentence('Apple falla por la configuración.');
+  h.conv.streamTurnEnd();
+  assert.deepEqual(streamed.map(s => s.action), ['start', 'append', 'append', 'end']);
+  assert.equal(new Set(streamed.map(s => s.id)).size, 1);
+  assert.equal(h.conv.playing.text, 'Google funciona. Apple falla por la configuración.');
+});
+
+test('stream: after the user cuts Claude, later sentences are kept for "sigue", not spoken', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(waitingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Google funciona.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Google funciona.' });
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  h.conv.stt({ type: 'partial', text: 'espera un segundo' });
+  h.conv.streamSentence('Apple falla por la configuración.');
+  assert.equal(streamed.filter(s => s.action === 'append').length, 1, 'nothing more is spoken');
+  h.conv.streamTurnEnd();
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.say('Sigue.');
+  h.advance(3000);
+  assert.equal(h.events('speak').at(-1).text, 'Google funciona. Apple falla por la configuración.');
+});
+
+test('echo is judged by the phrase each transcript belongs to', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ messages: [assistant('¿Prefieres Supabase o Neon para la base de datos?')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: '¿Prefieres Supabase o Neon para la base de datos?' });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 }); // Claude's voice in the mic
+  h.advance(1500);
+  h.conv.tts({ type: 'end', id });
+  h.advance(700);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.advance(300);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 2, onset_ms: 90 }); // the user answers
+  h.advance(400);
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Prefieres Supabase o Neon para la base de datos', confidence: 0.8 });
+  h.advance(600);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 2, silence_ms: 700 });
+  h.advance(300);
+  h.conv.stt({ type: 'final', utterance: 2, text: 'Neon.', confidence: 0.9 });
+  h.advance(3000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Neon.']);
+});

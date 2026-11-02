@@ -80,6 +80,7 @@ class VoiceConversation extends EventEmitter {
     this.endpointTimer = null;
     this.holdTimer = null;
     this.echoCancelled = false; // microphone captured with acoustic echo cancellation
+    this.phraseStarts = new Map(); // worker utterance id → when that phrase started
     this.ducked = false;
     this.bargeTimer = null;
     this._resetDraft();
@@ -132,8 +133,8 @@ class VoiceConversation extends EventEmitter {
     if (!this.listening()) return;
     if (ev.type === 'speech' && ev.state === 'start') this._speechStart(ev);
     else if (ev.type === 'speech' && ev.state === 'end') this._speechEnd(ev);
-    else if (ev.type === 'partial') this._partial(String(ev.text || ''));
-    else if (ev.type === 'final') this._final(String(ev.text || ''), typeof ev.confidence === 'number' ? ev.confidence : 1);
+    else if (ev.type === 'partial') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._partial(String(ev.text || '')); }
+    else if (ev.type === 'final') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._final(String(ev.text || ''), typeof ev.confidence === 'number' ? ev.confidence : 1); }
     else if (ev.type === 'rejected') this._final('', 0); // the phrase had no words
     else return;
     this._ui();
@@ -186,6 +187,10 @@ class VoiceConversation extends EventEmitter {
     this.deferredCommit = false; // the user went on talking: the turn is not over
     this.speechStartAt = this.now() - (Number(ev.onset_ms) || 0);
     this.phraseStartAt = this.speechStartAt; // kept across commits: decides whether a phrase can be echo
+    if (ev.utterance != null) {
+      this.phraseStarts.set(ev.utterance, this.speechStartAt); // a transcript is judged by its own phrase
+      if (this.phraseStarts.size > 50) this.phraseStarts.delete(this.phraseStarts.keys().next().value);
+    }
     this.sawPartial = false;
     this._clearHoldTimer();
     this._policy().speechStart(this.now());
@@ -219,7 +224,7 @@ class VoiceConversation extends EventEmitter {
 
   _partial(text) {
     if (this.speaking() || this._inEchoTail()) {
-      if (this._isEcho(text)) return; // Claude hearing itself through the speakers
+      if (this._isEcho(text, this._utteranceStart)) return; // Claude hearing itself through the speakers
       const words = fold(text).split(' ').filter(Boolean).length;
       if (this.speaking() && (this.ducked ? words >= 1 : contentWords(text).length >= 2)) this._bargeIn('parcial');
     }
@@ -234,7 +239,7 @@ class VoiceConversation extends EventEmitter {
     this.partialText = '';
     if (this.speechEndAt) this._metric('stt.final_ms', this.now() - this.speechEndAt);
     const policy = this._policy();
-    if (!text || confidence < MIN_CONFIDENCE || this._isEcho(text)) {
+    if (!text || confidence < MIN_CONFIDENCE || this._isEcho(text, this._utteranceStart)) {
       this.lowConfidence = Boolean(text) && confidence < MIN_CONFIDENCE;
       if (text) this._debug(this.lowConfidence ? `descarto (confianza ${confidence}): «${text}»` : `eco de Claude: «${text}»`);
       policy.final(this.now(), '', 0); // re-times the turn without adding anything
@@ -287,6 +292,39 @@ class VoiceConversation extends EventEmitter {
     this.emit('ack', { id: this.playing.id, phrase });
   }
 
+  // ── Streamed answers (controlled session): Claude talks while it writes ──────
+  // The provider feeds speakable sentences (SpeechChunker) as Claude's text streams in. They form one
+  // utterance; once the user cuts it, the rest of that turn is kept for "sigue" instead of spoken.
+
+  streamTurnStart() {
+    this.streamCut = false;
+    this.streamId = null;
+  }
+
+  streamSentence(sentence) {
+    const text = String(sentence || '').replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    if (this.streamCut) {
+      if (this.interrupted) this.interrupted.text = `${this.interrupted.text} ${text}`.trim();
+      return;
+    }
+    if (!this.playing || this.playing.id !== this.streamId) {
+      if (this.playing) this._stopTts();
+      this.counter += 1;
+      this.playing = { id: `s${this.counter}`, text: '', chunks: new Map(), current: null, startedAt: this.now(), ack: false, streaming: true };
+      this.streamId = this.playing.id;
+      this.interrupted = null;
+      this.emit('speak-stream', { id: this.playing.id, action: 'start' });
+    }
+    this.playing.text = `${this.playing.text} ${text}`.trim();
+    this.emit('speak-stream', { id: this.playing.id, action: 'append', text });
+  }
+
+  streamTurnEnd() {
+    if (this.playing && this.playing.id === this.streamId) this.emit('speak-stream', { id: this.streamId, action: 'end' });
+    this.streamId = null;
+  }
+
   _flushPendingSpeak() {
     const text = this.pendingSpeak;
     this.pendingSpeak = null;
@@ -313,6 +351,7 @@ class VoiceConversation extends EventEmitter {
     this._debug(`interrumpe a Claude (${reason})`);
     if (this.speechStartAt) this._metric('bargein.stop_ms', this.now() - this.speechStartAt);
     if (!this.playing.ack) this.interrupted = { ...this.playing, chunks: new Map(this.playing.chunks) };
+    if (this.playing.streaming) this.streamCut = true;
     this._stopTts();
   }
 
@@ -334,13 +373,17 @@ class VoiceConversation extends EventEmitter {
 
   // Without headphones Claude's voice reaches the microphone: a recognition whose words mostly come
   // from what Claude is (or was just) saying is its own echo.
-  _isEcho(text) {
+  // `startedAt`: when the phrase this transcript belongs to began (worker utterance id), if known.
+  _isEcho(text, startedAt = this.phraseStartAt) {
     if (this.echoCancelled) return false; // the microphone no longer hears Claude
     const ref = this.playing || (this._inEchoTail() ? this.lastPlayed : null);
     if (!ref) return false;
+    // Only voice that started while Claude was playing can be its echo: a phrase that began before
+    // Claude started talking is the user's even if it repeats Claude's words.
+    if (startedAt != null && startedAt < ref.startedAt - 150) return false;
     // A phrase that began after Claude went quiet is the user's, even if it repeats Claude's words
     // ("¿Supabase o Neon?" → "Neon"). Only voice that started during playback can be its echo.
-    if (!this.playing && this.phraseStartAt > ref.endedAt + 150) return false;
+    if (!this.playing && startedAt != null && startedAt > ref.endedAt + 150) return false;
     const heard = contentWords(text);
     if (!heard.length) return Boolean(this.playing);
     const spoken = new Set(contentWords(ref.text));
@@ -470,8 +513,9 @@ class VoiceConversation extends EventEmitter {
   }
 
   // Acknowledge only what deserves it: never after "para"/"espera", "un momento" before a clarification.
-  committed({ ok, route, urgency, text, clarification }) {
-    if (!ok || this.muted) return;
+  committed({ ok, route, urgency, text, clarification, stream }) {
+    // A controlled session answers within a second or two by voice: no acknowledgement needed.
+    if (!ok || this.muted || stream) return;
     let phrase = 'vale';
     if (route === 'steer' && urgency === 'interrupt') phrase = null;
     else if (route === 'answer' && (clarification || /\?\s*$/.test(String(text || '')))) phrase = 'momento';

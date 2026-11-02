@@ -483,7 +483,11 @@ class CallBroker extends EventEmitter {
     if (!call) return false;
     if (this.activeId === id) this.activeId = null;
 
-    if (call.responder && !call.resolved && call.interactionKind === 'stop') {
+    if (call.stream) {
+      // A controlled session ends with the call (its controller closes Claude); nothing stays held.
+      if (call.responder && !call.resolved) this._respond(call, NO_DECISION);
+      this._deleteCall(id);
+    } else if (call.responder && !call.resolved && call.interactionKind === 'stop') {
       // Hanging up a result means "done": let Claude stop.
       this._respond(call, NO_DECISION);
       this._deleteCall(id);
@@ -605,6 +609,56 @@ class CallBroker extends EventEmitter {
       },
     });
     return { ok: true, resolved: true, matched, clarification };
+  }
+
+  // ── Controlled sessions (src/voice/stream-call.js) ─────────────────────────
+  // The user called Claude from AgentCall: the call is active at once (no ring, DND does not apply).
+  // Idle Claude = waiting for a free reply ('stop'); busy Claude = working. Its permission and
+  // question prompts arrive through receivePermission/receiveAskUser and merge into it as usual.
+
+  openStreamCall({ sessionId, cwd, title } = {}) {
+    this._session({ session_id: sessionId, cwd });
+    const call = this._newCall({
+      sessionId,
+      type: 'stream',
+      stream: true,
+      claudeBusy: false,
+      interactionKind: 'stop',
+      title: title || projectName({ cwd }),
+      context: 'Llamada con Claude',
+      detail: 'Conversación',
+      messages: [],
+      resolved: false,
+    });
+    for (const other of this.calls.values()) {
+      if (other.id !== call.id && other.status === 'ringing') this._moveToQueued(other);
+    }
+    call.status = 'active';
+    this.activeId = call.id;
+    this._changed('active', { id: call.id });
+    return call;
+  }
+
+  setStreamBusy(callId, busy) {
+    const call = this.calls.get(callId);
+    if (!call?.stream) return;
+    call.claudeBusy = Boolean(busy);
+    if (!call.responder || call.resolved) {
+      call.interactionKind = busy ? null : 'stop';
+      call.awaitingClaude = Boolean(busy);
+    }
+    call.updatedAt = this.now();
+    this._changed();
+  }
+
+  addCallMessage(callId, message) {
+    const call = this.calls.get(callId);
+    if (!call || !message) return null;
+    const msg = { at: this.now(), ...message };
+    call.messages.push(msg);
+    call.updatedAt = this.now();
+    this._changed('message', { id: call.id, message: msg });
+    return msg;
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -825,7 +879,8 @@ class CallBroker extends EventEmitter {
       snoozedUntil: call.snoozedUntil,
       awaitingClaude: call.awaitingClaude,
       resolved: call.resolved,
-      waiting: Boolean(call.responder && !call.resolved),
+      waiting: call.responder && !call.resolved ? true : Boolean(call.stream && !call.claudeBusy),
+      stream: Boolean(call.stream),
       createdAt: call.createdAt,
       updatedAt: call.updatedAt,
       questionIndex: call.questionIndex || 0,

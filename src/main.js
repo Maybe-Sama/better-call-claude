@@ -596,7 +596,7 @@ class TtsManager {
         if (!line) continue;
         let event;
         try { event = JSON.parse(line); } catch { continue; }
-        if (event.type === 'ready') { this.ready = true; log(`TTS: ${event.engine} listo (voz ${event.voice})`); }
+        if (event.type === 'ready') { this.ready = true; log(`TTS: ${event.engine} listo (voz ${event.voice})`); syncEchoMode(); }
         if (event.type === 'warning') log(`TTS aviso: ${event.message}`);
         if (event.type === 'error') log(`TTS error: ${event.message}`);
         sendToRenderer('agentcall:tts', event);
@@ -610,6 +610,7 @@ class TtsManager {
       if (this.child !== child) return;
       this.child = null;
       this.ready = false;
+      syncEchoMode();
       this.failures += 1;
       sendToRenderer('agentcall:tts', { type: 'unavailable' });
       if (!quitting) setTimeout(() => this.start(), 2000).unref?.();
@@ -665,6 +666,11 @@ voice.on('ack', ({ id, phrase }) => {
   sendToRenderer('agentcall:voice', { cmd: 'ack', id });
   if (!tts.send({ cmd: 'ack', id, phrase })) { sendToRenderer('agentcall:voice', { cmd: 'stop' }); voice.tts({ type: 'end', id }); }
 });
+// Streamed answer: the window learns the id first, then the worker renders each sentence as it arrives.
+voice.on('speak-stream', ({ id, action, text }) => {
+  sendToRenderer('agentcall:voice', { cmd: `stream-${action}`, id, text });
+  tts.send({ cmd: `stream-${action}`, id, text });
+});
 voice.on('append', ({ text }) => sendToRenderer('agentcall:voice', { cmd: 'append', text }));
 voice.on('error', ({ message }) => sendToRenderer('agentcall:voice', { cmd: 'error', message }));
 voice.on('ui', snapshot => sendToRenderer('agentcall:voice-ui', snapshot));
@@ -706,6 +712,11 @@ function reconcileStt(active = activeCall()) {
   syncCapture(!muted);
 }
 
+// The voice detector may cut Claude only when the microphone cannot hear it: echo-cancelled capture AND
+// Claude speaking through the neural voice (the Windows fallback voice is not in the canceller's reference).
+let captureEchoCancelled = false;
+function syncEchoMode() { voice.setEchoCancelled(captureEchoCancelled && tts.ready); }
+
 // Echo-cancelled capture runs only during a call (the Windows microphone indicator stays off otherwise).
 function syncCapture(wanted) {
   const on = Boolean(wanted && captureMode === 'aec' && stt?.source === 'stdin');
@@ -724,14 +735,16 @@ function onCaptureStatus(status = {}) {
   }
   if (status.ok) {
     log(`Micro: ${status.label || 'predeterminado'} · cancelación de eco ${status.echoCancellation ? 'activa' : 'NO disponible'} · ${status.sampleRate} Hz`);
-    voice.setEchoCancelled(Boolean(status.echoCancellation));
+    captureEchoCancelled = Boolean(status.echoCancellation);
+    syncEchoMode();
     return;
   }
   // Capture in the window failed: Whisper opens the microphone itself, as before.
   log(`Micro con cancelación de eco no disponible (${status.error || 'error'}); uso el micro directo.`);
   captureMode = 'device';
   captureOn = false;
-  voice.setEchoCancelled(false);
+  captureEchoCancelled = false;
+  syncEchoMode();
   const wasListening = stt?.listening;
   stt?.stop();
   stt?.ensure();

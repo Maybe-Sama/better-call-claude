@@ -327,8 +327,7 @@ let ducked = false;
 function setDucked(on) {
   ducked = on;
   for (const el of [playback.current, ...(playback.queue || [])]) if (el) el.volume = on ? DUCK_VOLUME : 1;
-  // The Windows fallback voice cannot be turned down: it goes silent at once instead.
-  if (on && currentUtterance) stopSpeech();
+  // (The Windows fallback voice cannot be turned down; the main process never ducks it: see syncEchoMode.)
 }
 
 function progress(event) { try { window.agentCall.ttsProgress(event); } catch {} }
@@ -461,6 +460,51 @@ function discardPlayback() {
 
 function emptyPlayback(extra = {}) { return { id: null, queue: [], current: null, done: false, ...extra }; }
 
+// Streamed answer: sentences arrive while Claude writes. The voice worker renders them in order and
+// sends audio with this id; with the Windows fallback voice each sentence is queued as an utterance.
+let browserStream = null; // { id, pending, ended, seq }
+
+function startStream(id) {
+  stopSpeech();
+  ducked = false;
+  lastSpokenText = '';
+  setTts(true);
+  if (ttsEngine === 'kokoro') playback = emptyPlayback({ id });
+  else browserStream = { id, pending: 0, ended: false, seq: 0 };
+}
+
+function appendStream(id, text) {
+  lastSpokenText = `${lastSpokenText} ${text}`.trim();
+  const st = browserStream;
+  if (ttsEngine === 'kokoro' || !st || st.id !== id) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  if (!spanishVoice) pickSpanishVoice();
+  if (spanishVoice) utterance.voice = spanishVoice;
+  utterance.lang = spanishVoice?.lang || 'es-ES';
+  utterance.rate = 1.08 * voiceRate;
+  const seq = st.seq;
+  st.seq += 1;
+  st.pending += 1;
+  utterance.onstart = () => progress({ type: 'chunk', id, seq, text });
+  const done = () => {
+    if (browserStream !== st) return;
+    st.pending -= 1;
+    if (st.ended && st.pending <= 0) { browserStream = null; speechFinished(id); }
+  };
+  utterance.onend = done;
+  utterance.onerror = done;
+  currentUtterance = utterance;
+  browserUtteranceId = id;
+  speechSynthesis.speak(utterance);
+}
+
+function endStream(id) {
+  const st = browserStream;
+  if (!st || st.id !== id) return;
+  st.ended = true;
+  if (st.pending <= 0) { browserStream = null; speechFinished(id); }
+}
+
 // Short acknowledgement chosen by the main process ("Vale.", "Un momento."); the worker already plays it.
 function playAck(id) {
   if (ttsEngine !== 'kokoro') { progress({ type: 'end', id }); return; }
@@ -478,6 +522,7 @@ function stopSpeech() {
   }
   currentUtterance = null;
   browserUtteranceId = null;
+  browserStream = null;
   speechSynthesis.cancel();
   if (id) progress({ type: 'end', id, interrupted: true });
   setTts(false);
@@ -615,6 +660,9 @@ window.agentCall.onVoice(cmd => {
   else if (cmd.cmd === 'stop') { stopSpeech(); ducked = false; }
   else if (cmd.cmd === 'duck' || cmd.cmd === 'unduck') setDucked(cmd.cmd === 'duck');
   else if (cmd.cmd === 'ack') playAck(cmd.id);
+  else if (cmd.cmd === 'stream-start') startStream(cmd.id);
+  else if (cmd.cmd === 'stream-append') appendStream(cmd.id, cmd.text);
+  else if (cmd.cmd === 'stream-end') endStream(cmd.id);
   else if (cmd.cmd === 'error') showBanner(cmd.message);
   else if (cmd.cmd === 'append') {
     const input = document.getElementById('textInput');

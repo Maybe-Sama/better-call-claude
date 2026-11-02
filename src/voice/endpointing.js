@@ -114,7 +114,18 @@ class AdaptiveEndpointer extends LegacyEndpointer {
     this.pendingFinals = 0; // phrases that ended and whose transcript has not arrived yet
   }
 
-  partial() { /* partials only arrive while the user talks, and speechStart already cancelled */ }
+  speechStart(t) {
+    this.vadEvents = true;
+    super.speechStart(t);
+  }
+
+  // Whisper reports speech start/end, so partials change nothing. Windows dictation (the fallback
+  // engines) sends only partials and finals: a partial then means the user is still talking.
+  partial() {
+    if (this.vadEvents) return;
+    this.speaking = true;
+    this.deadline = null;
+  }
 
   // expectFinal: false when the worker will not transcribe this phrase (too short, cancelled).
   // silenceMs: how long the worker waited in silence before reporting the end (voice stopped at t - silenceMs).
@@ -126,6 +137,7 @@ class AdaptiveEndpointer extends LegacyEndpointer {
 
   // A rejected phrase (no words) arrives as final(t, '', 0).
   final(t, text, confidence = 1) {
+    if (!this.vadEvents) this.speaking = false; // without voice events, a final closes the phrase
     this.pendingFinals = Math.max(0, this.pendingFinals - 1);
     if (text && confidence >= ADAPTIVE.minConfidence) this.parts.push(fixShortAnswer(text, this.options));
     this._schedule(t);

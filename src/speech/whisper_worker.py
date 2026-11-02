@@ -191,9 +191,15 @@ class Transcriber(threading.Thread):
                 return  # the user went on talking: this speculation is obsolete
         started = time.monotonic()
         try:
-            text, confidence = self.transcribe(audio, final=(kind == "final"))
+            # A speculative final IS the final if the silence lasts: same model and settings.
+            text, confidence = self.transcribe(audio, final=(kind in ("final", "spec")))
         except Exception as exc:  # keep the worker alive
             emit({"type": "error", "engine": "whisper", "message": str(exc)[:300]})
+            if kind == "spec":
+                with self.cv:
+                    entry = self.spec.pop(utt_id, None)
+                if entry and entry["gen"] == gen and entry["promoted"]:
+                    self.submit("final", utt_id, audio)  # the phrase ended meanwhile: transcribe it normally
             return
         if self._stale(utt_id):
             return

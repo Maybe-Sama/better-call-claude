@@ -6,6 +6,9 @@ stdin  (one JSON object per line)
   {"cmd": "stop"}                                  silence now (the user started talking)
   {"cmd": "prepare", "text": "..."}               synthesise ahead (while the phone rings); a later speak of
                                                    the same text plays from this cache at once
+  {"cmd": "stream-start", "id": "..."}            Claude's answer is being written: sentences follow
+  {"cmd": "stream-append", "id": "...", "text"}   one more speakable sentence (synthesis starts at once)
+  {"cmd": "stream-end", "id": "..."}              no more sentences; "done" once the last one is sent
 stdout (ASCII JSON lines)
   {"type": "ready"}  {"type": "audio", "id", "seq", "rate", "pcm": base64 int16 mono}  {"type": "done", "id"}  {"type": "error"}
 
@@ -16,6 +19,7 @@ its own window (same device as the ringtone) and can cut it instantly. Nothing i
 import argparse
 import base64
 import collections
+import concurrent.futures
 import json
 import os
 import queue
@@ -76,6 +80,7 @@ class Prepared:
     def __init__(self):
         self.items = []
         self.done = False
+        self.failed = False  # stopped before the last sentence: the rest is synthesised when spoken
         self.cv = threading.Condition()
 
 
@@ -97,6 +102,8 @@ class Speaker:
         self.current = None
         self.acks = {}
         self.prepared = collections.OrderedDict()  # normalized text → Prepared (a few, newest last)
+        self.stream = None  # {"id", "queue", "stopped"} while Claude's answer is streamed in
+        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=3)  # sentences rendered ahead, in order
 
     def synth(self, text):
         with self.model_lock:  # an interrupted utterance may still be inside create(); never run two at once
@@ -153,6 +160,9 @@ class Speaker:
                     entry.cv.notify_all()
         except Exception as exc:
             emit({"type": "warning", "message": f"prepare: {exc}"[:200]})
+            entry.failed = True
+            if self.prepared.get(text) is entry:
+                self.prepared.pop(text, None)  # never serve a cut-down version again
         finally:
             with entry.cv:
                 entry.done = True
@@ -171,9 +181,62 @@ class Speaker:
             seq += 1
         return seq
 
+    # ── Streamed answers: sentences arrive while Claude writes ───────────────
+    def render(self, text):
+        if self.edge_voice:
+            try:
+                import asyncio
+                return ("mp3", asyncio.run(asyncio.wait_for(self._edge_mp3(text), timeout=8)))
+            except Exception as exc:
+                emit({"type": "warning", "message": f"Edge TTS: {exc}"[:200]})
+        return ("pcm", self.synth(text))
+
+    def stream_start(self, utt_id):
+        self.stop()
+        stopped = threading.Event()
+        st = {"id": utt_id, "queue": queue.Queue(), "stopped": stopped}
+        with self.lock:
+            self.current = stopped
+            self.stream = st
+        threading.Thread(target=self._produce_stream, args=(st,), daemon=True).start()
+
+    def stream_append(self, utt_id, text):
+        st = self.stream
+        if not st or st["id"] != utt_id or st["stopped"].is_set():
+            return
+        for s in sentences(text):
+            st["queue"].put((s, self.pool.submit(self.render, s)))
+
+    def stream_end(self, utt_id):
+        st = self.stream
+        if st and st["id"] == utt_id:
+            st["queue"].put(None)
+
+    def _produce_stream(self, st):
+        seq = 0
+        try:
+            while not st["stopped"].is_set():
+                try:
+                    item = st["queue"].get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if item is None:
+                    break
+                text, future = item
+                audio = future.result()
+                if st["stopped"].is_set():
+                    break
+                self._send(st["id"], seq, audio, text)
+                seq += 1
+        except Exception as exc:
+            emit({"type": "error", "id": st["id"], "message": str(exc)[:300]})
+        finally:
+            emit({"type": "done", "id": st["id"], "chunks": seq, "interrupted": st["stopped"].is_set()})
+
     def stop(self):
         with self.lock:
             cur, self.current = self.current, None
+            self.stream = None
         if cur:
             cur.set()
 
@@ -243,6 +306,12 @@ class Speaker:
                 seq += 1
             elif entry is not None:
                 seq = self._play_prepared(utt_id, stopped, entry)
+                if entry.failed and not stopped.is_set():
+                    for s in sentences(text)[seq:]:  # what preparation did not reach
+                        if stopped.is_set():
+                            break
+                        self._send(utt_id, seq, self.render(s), s)
+                        seq += 1
             elif self.edge_voice:
                 for s, rendered in self._edge_sentences(sentences(text), stopped):
                     if stopped.is_set():
@@ -302,6 +371,12 @@ def main():
             speaker.stop()
         elif cmd == "prepare" and msg.get("text"):
             speaker.prepare(msg["text"])
+        elif cmd == "stream-start":
+            speaker.stream_start(msg.get("id", ""))
+        elif cmd == "stream-append" and msg.get("text"):
+            speaker.stream_append(msg.get("id", ""), msg["text"])
+        elif cmd == "stream-end":
+            speaker.stream_end(msg.get("id", ""))
     speaker.stop()
     return 0
 

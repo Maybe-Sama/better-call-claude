@@ -146,3 +146,14 @@ test('adaptive: floors count from when the voice really stopped, not from when t
   assert.ok(yes.deadline - 1000 <= 950, `short answer: ${yes.deadline - 1000}`);
   assert.ok(yes.deadline < free.deadline, 'a short answer goes before a free reply');
 });
+
+test('adaptive: engines without voice events (Windows dictation) still wait while partials come', () => {
+  const p = new AdaptiveEndpointer({ kind: 'stop' });
+  p.final(1000, 'Haz el cambio en la base de datos.');
+  assert.notEqual(p.deadline, null);
+  p.partial(1200, 'y luego sube');
+  assert.equal(p.deadline, null, 'the user is still talking');
+  p.final(2500, 'y luego sube los cambios a producción.');
+  assert.notEqual(p.deadline, null);
+  assert.equal(p.take(), 'Haz el cambio en la base de datos. y luego sube los cambios a producción.');
+});
