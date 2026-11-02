@@ -63,17 +63,20 @@ function launchTarget() {
 }
 
 // Opens AgentCall and resolves true once it listens; false if it cannot start or does not answer in time.
-async function startAgentCall(target, timeoutMs = STARTUP_MS) {
+async function startAgentCall(target, timeoutMs = STARTUP_MS, base = BASE) {
   let failed = false;
   try {
     const child = spawn(target.electron, [target.appDir], { cwd: target.appDir, detached: true, stdio: 'ignore' });
     child.on('error', () => { failed = true; }); // e.g. a damaged electron.exe: unavailable, not a hook error
+    // A crash (missing DLL, broken app) exits non-zero. Exit 0 is the single-instance lock: another
+    // AgentCall is already starting, so keep waiting for it.
+    child.on('exit', code => { if (code !== 0) failed = true; });
     child.unref();
   } catch { return false; }
   const deadline = Date.now() + timeoutMs;
   while (!failed && Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 500));
-    if (!failed && await request('GET', `${BASE}/health`, null, 700)) return true;
+    if (!failed && await request('GET', `${base}/health`, null, 700)) return true;
   }
   return false;
 }

@@ -44,10 +44,36 @@ test('launchTarget ignores a malformed launch.json instead of throwing', t => {
   }
 });
 
+// Nothing listens here, so the tests do not depend on a running AgentCall.
+const CLOSED = 'http://127.0.0.1:1';
+
+// A fake "app" for `node <appDir>`: index.js exits with the given code.
+function fakeApp(t, exitCode) {
+  const appDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcall-fake-app-'));
+  fs.writeFileSync(path.join(appDir, 'index.js'), `process.exit(${exitCode});`);
+  t.after(() => fs.rmSync(appDir, { recursive: true, force: true }));
+  return { electron: process.execPath, appDir };
+}
+
 test('startAgentCall reports a launch failure instead of crashing the hook', async () => {
   const missing = path.join(os.tmpdir(), 'agentcall-no-such-dir', 'electron.exe');
   const started = Date.now();
-  const ok = await startAgentCall({ electron: missing, appDir: path.dirname(missing) }, 3000);
+  const ok = await startAgentCall({ electron: missing, appDir: path.dirname(missing) }, 3000, CLOSED);
   assert.equal(ok, false);
   assert.ok(Date.now() - started < 2000, 'gives up as soon as the spawn fails');
+});
+
+test('startAgentCall gives up when AgentCall exits with an error (damaged install)', async t => {
+  const started = Date.now();
+  const ok = await startAgentCall(fakeApp(t, 3), 4000, CLOSED);
+  assert.equal(ok, false);
+  assert.ok(Date.now() - started < 2500, 'does not wait out the startup timeout');
+});
+
+test('startAgentCall keeps waiting when AgentCall exits cleanly (another instance is starting)', async t => {
+  // Electron's single-instance lock makes a second copy quit with code 0 while the first one starts.
+  const started = Date.now();
+  const ok = await startAgentCall(fakeApp(t, 0), 1500, CLOSED);
+  assert.equal(ok, false);
+  assert.ok(Date.now() - started >= 1400, 'waits for the instance that owns the lock');
 });
