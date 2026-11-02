@@ -58,9 +58,12 @@ DEFAULT_PROMPT = (
 )
 
 out_lock = threading.Lock()
+T0 = time.monotonic()
 
 
 def emit(obj):
+    # "wt": seconds since the worker started, so the voice lab can align events with a test WAV.
+    obj.setdefault("wt", round(time.monotonic() - T0, 3))
     line = json.dumps(obj, ensure_ascii=True)
     with out_lock:
         sys.stdout.write(line + "\n")
@@ -126,6 +129,7 @@ class Transcriber(threading.Thread):
                     self.partial = None
             if self._stale(utt_id) or (kind == "partial" and utt_id in self.done_utterances):
                 continue
+            started = time.monotonic()
             try:
                 text, confidence = self.transcribe(audio, final=(kind == "final"))
             except Exception as exc:  # keep the worker alive
@@ -133,14 +137,15 @@ class Transcriber(threading.Thread):
                 continue
             if self._stale(utt_id):
                 continue
+            timing = {"stt_ms": int((time.monotonic() - started) * 1000), "audio_ms": int(len(audio) * 1000 / SAMPLE_RATE)}
             if kind == "final":
                 self.done_utterances.add(utt_id)
                 if text:
-                    emit({"type": "final", "text": text, "confidence": round(confidence, 3), "utterance": utt_id})
+                    emit({"type": "final", "text": text, "confidence": round(confidence, 3), "utterance": utt_id, **timing})
                 else:
-                    emit({"type": "rejected", "utterance": utt_id})
+                    emit({"type": "rejected", "utterance": utt_id, **timing})
             elif text and utt_id not in self.done_utterances:
-                emit({"type": "partial", "text": text, "utterance": utt_id})
+                emit({"type": "partial", "text": text, "utterance": utt_id, **timing})
 
     def transcribe(self, audio, final):
         model = self.model if final else self.partial_model
@@ -185,6 +190,7 @@ class Segmenter:
         self.silent_frames = 0
         self.since_partial = 0
         self.last_level = 0.0
+        self.frames_fed = 0  # audio clock: position of the current frame in the stream
 
     def cancel(self):
         """Pause: abandon the current utterance (telling the app speech ended) and all pending work."""
@@ -199,7 +205,11 @@ class Segmenter:
         self.pre_roll = []
         self.silent_frames = 0
 
+    def audio_t(self):
+        return round(self.frames_fed * FRAME / SAMPLE_RATE, 3)
+
     def feed(self, frame):
+        self.frames_fed += 1
         rms = float(np.sqrt(np.mean(frame * frame)) + 1e-9)
         threshold = max(self.noise * 2.2, SPEECH_THRESHOLD)
         self.last_threshold = threshold
@@ -216,7 +226,9 @@ class Segmenter:
             self.pre_roll = (self.pre_roll + [frame])[-int(PRE_ROLL_S * SAMPLE_RATE / FRAME):]
             if sum(self.history) >= START_FRAMES:
                 self.utt_id += 1
-                emit({"type": "speech", "state": "start", "utterance": self.utt_id})
+                # onset_ms: how long ago (audio time) the first speech frame of the window was heard.
+                onset_ms = (len(self.history) - self.history.index(True)) * FRAME * 1000 // SAMPLE_RATE
+                emit({"type": "speech", "state": "start", "utterance": self.utt_id, "onset_ms": onset_ms, "audio_t": self.audio_t()})
                 self.utterance = list(self.pre_roll)
                 self.levels = []
                 self.silent_frames = 0
@@ -242,7 +254,8 @@ class Segmenter:
         voiced_s = len(audio) / SAMPLE_RATE - self.silent_frames * FRAME / SAMPLE_RATE
         levels = getattr(self, "levels", []) or [0.0]
         emit({"type": "speech", "state": "end", "utterance": self.utt_id, "peak": round(max(levels), 4),
-              "rms": round(sum(levels) / len(levels), 4), "threshold": round(getattr(self, "last_threshold", 0.0), 4)})
+              "rms": round(sum(levels) / len(levels), 4), "threshold": round(getattr(self, "last_threshold", 0.0), 4),
+              "silence_ms": self.silent_frames * FRAME * 1000 // SAMPLE_RATE, "voiced_ms": int(voiced_s * 1000), "audio_t": self.audio_t()})
         if voiced_s >= MIN_UTTERANCE_S:
             self.t.submit("final", self.utt_id, audio)
         self.reset()
@@ -265,12 +278,20 @@ def run_wav(args, segmenter):
             raise SystemExit("test WAV must be 16 kHz mono 16-bit")
         pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
     pcm = np.concatenate([pcm, np.zeros(SAMPLE_RATE, dtype=np.float32)])  # trailing silence
-    for i in range(0, len(pcm) - FRAME, FRAME):
+    # --realtime paces the frames like a microphone, so latencies measured on the WAV are real ones.
+    emit({"type": "wav-start", "seconds": round(len(pcm) / SAMPLE_RATE, 2), "realtime": bool(args.realtime)})
+    started = time.monotonic()
+    for n, i in enumerate(range(0, len(pcm) - FRAME, FRAME)):
+        if args.realtime:
+            delay = started + n * FRAME / SAMPLE_RATE - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
         segmenter.feed(pcm[i:i + FRAME])
     segmenter.finish()
     while segmenter.t.finals or segmenter.t.partial is not None:
         time.sleep(0.1)
     time.sleep(3)
+    emit({"type": "wav-end"})
 
 
 def pick_input_device(sd, wanted):
@@ -370,6 +391,7 @@ def main():
     parser.add_argument("--backend", default=os.environ.get("AGENTCALL_WHISPER_BACKEND", "cpu"), choices=["cpu", "dml"])
     parser.add_argument("--dml-model-dir", default=os.path.join(os.environ.get("LOCALAPPDATA", "."), "AgentCall", "models", "whisper-turbo-onnx"))
     parser.add_argument("--wav", default="")
+    parser.add_argument("--realtime", action="store_true", help="testing: feed --wav at real-time speed")
     parser.add_argument("--mic", default=os.environ.get("AGENTCALL_MIC", ""))
     parser.add_argument("--context", default="", help="testing: context text")
     parser.add_argument("--hotwords", default="", help="testing: hotwords")
