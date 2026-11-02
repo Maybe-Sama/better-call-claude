@@ -20,7 +20,7 @@ const CONFIG_KEYS = {
   defaultMode: 'AGENTCALL_DEFAULT_MODE',
   ttsProvider: 'AGENTCALL_TTS_PROVIDER', edgeVoice: 'AGENTCALL_EDGE_VOICE', edgeRate: 'AGENTCALL_EDGE_RATE',
   micGain: 'AGENTCALL_MIC_GAIN', speechThreshold: 'AGENTCALL_SPEECH_THRESHOLD', whisperBackend: 'AGENTCALL_WHISPER_BACKEND',
-  voiceMetrics: 'AGENTCALL_VOICE_METRICS',
+  voiceMetrics: 'AGENTCALL_VOICE_METRICS', capture: 'AGENTCALL_CAPTURE',
 };
 try {
   const config = JSON.parse(fs.readFileSync(path.join(process.env.LOCALAPPDATA || '', 'AgentCall', 'config.json'), 'utf8'));
@@ -237,11 +237,12 @@ function holdHook(res, label) {
     }
   });
   return {
+    // Returns whether the response could be written (false: Claude already closed the request).
     respond(body) {
-      if (done) return;
+      if (done) return false;
       done = true;
       log(`${label} → ${JSON.stringify(body || {}).slice(0, 160)}`);
-      jsonResponse(res, 200, body || {});
+      return jsonResponse(res, 200, body || {});
     },
     bind(call) {
       if (call) callId = call.id;
@@ -278,13 +279,15 @@ async function routeHook(req, res) {
       const context = broker.notePrompt(body, hint);
       if (!context) return jsonResponse(res, 200, {});
       log(`UserPromptSubmit [${session}] → contexto (${broker.sessionMode(body.session_id, hint)})`);
-      return jsonResponse(res, 200, { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } });
+      if (!jsonResponse(res, 200, { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } })) broker.restorePendingSpeech(body.session_id);
+      return;
     }
 
     case '/hooks/post-tool-use': {
       const output = broker.noteToolDone(body);
       if (output) log(`PostToolUse [${session}] → entrego lo dicho en la llamada`);
-      return jsonResponse(res, 200, output || {});
+      if (!jsonResponse(res, 200, output || {}) && output) broker.restorePendingSpeech(body.session_id);
+      return;
     }
 
     case '/hooks/ask-user': {
@@ -370,6 +373,10 @@ const GPU_MODEL = path.join(AGENTCALL_DATA, 'models', 'whisper-turbo-onnx', 'onn
 let whisperGpu = (process.env.AGENTCALL_WHISPER_BACKEND || 'cpu') === 'dml' && fs.existsSync(GPU_PYTHON) && fs.existsSync(GPU_MODEL);
 let whisperUnavailable = !['auto', 'whisper'].includes(STT_ENGINE) || !(fs.existsSync(WHISPER_PYTHON) || whisperGpu);
 let winrtExe = null;
+// "aec": the window captures the microphone with Chromium echo cancellation and streams it to Whisper
+// (--source stdin); "device" (default): Whisper opens the microphone itself. aec falls back to device.
+let captureMode = (process.env.AGENTCALL_CAPTURE || 'device').toLowerCase() === 'aec' ? 'aec' : 'device';
+let captureOn = false;
 let winrtUnavailable = !['auto', 'winrt'].includes(STT_ENGINE);
 
 function prepareWinRtEngine() {
@@ -409,7 +416,7 @@ class SttManager {
     if (useWhisper) {
       child = spawn(whisperGpu ? GPU_PYTHON : WHISPER_PYTHON, ['-u', path.join(__dirname, 'speech', 'whisper_worker.py'),
         '--language', STT_CULTURE.split('-')[0], '--models-dir', path.join(AGENTCALL_DATA, 'models'),
-        '--backend', whisperGpu ? 'dml' : 'cpu'],
+        '--backend', whisperGpu ? 'dml' : 'cpu', '--source', captureMode === 'aec' ? 'stdin' : 'device'],
         { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
     } else if (useWinRt) {
       child = spawn(winrtExe, [STT_CULTURE], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -421,6 +428,8 @@ class SttManager {
     this.child = child;
     this.ready = false;
     this.engine = useWhisper ? 'whisper' : useWinRt ? 'winrt' : 'classic';
+    this.source = useWhisper && captureMode === 'aec' ? 'stdin' : 'device';
+    this.droppedPcm = 0;
     this.listening = false;
     this.buffer = '';
 
@@ -512,6 +521,14 @@ class SttManager {
     this.contextChild = this.child;
     const json = JSON.stringify({ cmd: 'context', ...context }).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
     try { this.child.stdin.write(`${json}\n`); } catch {}
+  }
+
+  // Audio from the window (echo-cancelled capture), 16 kHz int16 frames.
+  writePcm(data) {
+    const child = this.child;
+    if (!child || !this.listening || this.source !== 'stdin' || !data) return;
+    if (child.stdin.writableLength > 2_000_000) { this.droppedPcm += 1; return; } // worker stuck: never grow without bound
+    try { child.stdin.write(`{"pcm":"${Buffer.from(data).toString('base64')}"}\n`); } catch {}
   }
 
   setListening(value) {
@@ -615,9 +632,14 @@ const metrics = new VoiceMetrics({
   sink: /^(1|true)$/i.test(process.env.AGENTCALL_VOICE_METRICS || '') ? jsonlSink(path.join(AGENTCALL_DATA, 'voice-metrics.jsonl')) : null,
 });
 
-function routeUserText({ callId, text, urgency, source }) {
+function routeUserText({ callId, sessionId, text, urgency, source }) {
   const call = broker.calls.get(callId);
-  if (!call) return { ok: false, error: 'Esta llamada ya no existe.' };
+  if (!call) {
+    // The call ended mid-sentence (hung up, replaced): the words still go to that session.
+    if (!sessionId) return { ok: false, error: 'Esta llamada ya no existe.' };
+    log(`Voz → cola de la sesión (${String(text).length} caracteres, ${source})`);
+    return { ...broker.queueSessionSpeech(sessionId, text, urgency || classifyUrgency(text)), route: 'steer' };
+  }
   const answering = Boolean(call.responder && !call.resolved);
   const result = answering ? broker.submitUserText(callId, text) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
   log(`Voz → ${answering ? 'respuesta' : `cola ${result.urgency || ''}`} (${String(text).length} caracteres, ${source})`);
@@ -631,8 +653,10 @@ voice.on('tts', ({ action }) => {
   sendToRenderer('agentcall:voice', { cmd: action });
 });
 voice.on('ack', ({ id, phrase }) => {
-  if (tts.send({ cmd: 'ack', id, phrase })) sendToRenderer('agentcall:voice', { cmd: 'ack', id });
-  else voice.tts({ type: 'end', id }); // no neural voice: no acknowledgement
+  if (!tts.ready) { voice.tts({ type: 'end', id }); return; } // no neural voice: no acknowledgement
+  // The window learns the id first: the pre-rendered audio may come back from the worker at once.
+  sendToRenderer('agentcall:voice', { cmd: 'ack', id });
+  if (!tts.send({ cmd: 'ack', id, phrase })) { sendToRenderer('agentcall:voice', { cmd: 'stop' }); voice.tts({ type: 'end', id }); }
 });
 voice.on('append', ({ text }) => sendToRenderer('agentcall:voice', { cmd: 'append', text }));
 voice.on('error', ({ message }) => sendToRenderer('agentcall:voice', { cmd: 'error', message }));
@@ -640,6 +664,7 @@ voice.on('ui', snapshot => sendToRenderer('agentcall:voice-ui', snapshot));
 voice.on('local', ({ intent }) => log(`Voz: ${intent === 'resume' ? 'sigue donde lo dejó' : 'repite lo último'}`));
 voice.on('metric', ({ name, ms }) => metrics.record(name, ms));
 voice.on('debug', message => log(`Voz: ${message}`));
+voice.on('failure', category => { try { metrics.fail(category); } catch {} });
 
 // The microphone opens as soon as the call is answered and stays open while Claude speaks and works.
 // Recognition context for the active call: the question and its options, or the key terms of Claude's message.
@@ -666,11 +691,38 @@ function sttContextFor(call) {
 
 function reconcileStt(active = activeCall()) {
   if (!stt) return;
-  if (!active) return stt.idle();
+  if (!active) { syncCapture(false); return stt.idle(); }
   stt.ensure();
   stt.setContext(sttContextFor(active));
   // The microphone stays open for the whole call: what is said while Claude works is queued for it.
   stt.setListening(!muted);
+  syncCapture(!muted);
+}
+
+// Echo-cancelled capture runs only during a call (the Windows microphone indicator stays off otherwise).
+function syncCapture(wanted) {
+  const on = Boolean(wanted && captureMode === 'aec' && stt?.source === 'stdin');
+  if (on === captureOn) return;
+  captureOn = on;
+  // AGENTCALL_CAPTURE_AEC=0: same path without echo cancellation (voice lab A/B).
+  sendToRenderer('agentcall:capture', { on, mic: process.env.AGENTCALL_MIC || '', aec: process.env.AGENTCALL_CAPTURE_AEC !== '0' });
+}
+
+function onCaptureStatus(status = {}) {
+  if (status.ok) {
+    log(`Micro: ${status.label || 'predeterminado'} · cancelación de eco ${status.echoCancellation ? 'activa' : 'NO disponible'} · ${status.sampleRate} Hz`);
+    voice.setEchoCancelled(Boolean(status.echoCancellation));
+    return;
+  }
+  // Capture in the window failed: Whisper opens the microphone itself, as before.
+  log(`Micro con cancelación de eco no disponible (${status.error || 'error'}); uso el micro directo.`);
+  captureMode = 'device';
+  captureOn = false;
+  voice.setEchoCancelled(false);
+  const wasListening = stt?.listening;
+  stt?.stop();
+  stt?.ensure();
+  if (wasListening) reconcileStt();
 }
 
 function registerIpc() {
@@ -692,6 +744,8 @@ function registerIpc() {
   });
   ipcMain.handle('agentcall:adopt-draft', () => voice.adoptDraft());
   ipcMain.on('agentcall:set-typing', (_e, value) => voice.setTyping(value));
+  ipcMain.on('agentcall:pcm', (_e, data) => stt?.writePcm(data));
+  ipcMain.on('agentcall:capture-status', (_e, status) => onCaptureStatus(status));
   ipcMain.on('agentcall:tts-progress', (_e, event) => { if (event && typeof event === 'object') voice.tts(event); });
   ipcMain.handle('agentcall:voice-metrics', () => metrics.summary());
   ipcMain.handle('agentcall:set-muted', (_e, value) => { log(`UI: micrófono ${value ? 'silenciado' : 'activo'}`); muted = Boolean(value); voice.setMuted(muted); reconcileStt(); return muted; });

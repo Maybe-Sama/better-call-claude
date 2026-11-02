@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('agentCall', {
   voiceMetrics: () => ipcRenderer.invoke('agentcall:voice-metrics'),
   onVoice: (callback) => ipcRenderer.on('agentcall:voice', (_event, data) => callback(data)),
   onVoiceUi: (callback) => ipcRenderer.on('agentcall:voice-ui', (_event, data) => callback(data)),
+  // Echo-cancelled microphone capture (src/renderer/capture.js).
+  sendPcm: (buffer) => ipcRenderer.send('agentcall:pcm', buffer),
+  captureStatus: (status) => ipcRenderer.send('agentcall:capture-status', status),
+  onCapture: (callback) => ipcRenderer.on('agentcall:capture', (_event, cmd) => callback(cmd)),
   onTts: (callback) => ipcRenderer.on('agentcall:tts', (_event, data) => callback(data)),
   onState: (callback) => ipcRenderer.on('agentcall:state', (_event, state) => callback(state)),
   onStt: (callback) => ipcRenderer.on('agentcall:stt', (_event, data) => callback(data)),

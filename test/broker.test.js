@@ -516,3 +516,28 @@ test('queueUserSpeech needs an existing call and some text', () => {
   const call = workingCall(broker);
   assert.equal(broker.queueUserSpeech(call.id, '   ').ok, false);
 });
+
+test('speech whose hook response could not be written is put back first in line', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  broker.queueUserSpeech(call.id, 'Primero esto.', 'queue');
+  assert.ok(broker.noteToolDone(tool('w1')));
+  broker.queueUserSpeech(call.id, 'Y luego esto.', 'queue');
+  assert.equal(broker.restorePendingSpeech('w1'), 1, 'the write failed');
+  assert.deepEqual(broker.pendingSpeech('w1').map(i => i.text), ['Primero esto.', 'Y luego esto.']);
+  assert.equal(broker.getSnapshot().calls[0].messages.find(m => m.text === 'Primero esto.').delivered, false);
+});
+
+test('a held Stop that cannot be answered keeps the speech for later', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  broker.queueUserSpeech(call.id, 'Pruébalo en el móvil.', 'queue');
+  broker.receiveCompletion({ session_id: 'w1', stop_hook_active: true, last_assistant_message: 'Ya está.' }, { responder: () => false });
+  assert.deepEqual(broker.pendingSpeech('w1').map(i => i.text), ['Pruébalo en el móvil.']);
+});
+
+test('speech for a session whose call is gone is still queued', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  assert.equal(broker.queueSessionSpeech('gone', 'Y sube los cambios.').queued, true);
+  assert.match(broker.noteToolDone(tool('gone')).hookSpecificOutput.additionalContext, /sube los cambios/);
+});

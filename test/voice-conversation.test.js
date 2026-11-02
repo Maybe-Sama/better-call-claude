@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { VoiceConversation, classifyUrgency, HOLD_MS } = require('../src/voice/conversation');
+const { VoiceConversation, classifyUrgency, HOLD_MS, BARGE_CONFIRM_MS } = require('../src/voice/conversation');
 
 // Fake clock + timers; `out` collects every event the conversation emits.
 function harness(options = {}) {
@@ -192,13 +192,21 @@ test('typing takes over the spoken draft', () => {
   assert.equal(h.events('commit').length, 0, 'the user will send it with Enter');
 });
 
-test('another call drops the draft of the previous one', () => {
+test('words still waiting when the call ends go to that call, not to the next one', () => {
   const h = harness();
   h.conv.setCall(waitingCall());
   h.say('Haz el cambio');
   h.conv.setCall(waitingCall({ id: 'c2', sessionId: 's2' }));
   h.advance(6000);
-  assert.equal(h.events('commit').length, 0);
+  assert.deepEqual(h.events('commit').map(c => [c.callId, c.sessionId, c.text]), [['c1', 's1', 'Haz el cambio']]);
+});
+
+test('muting during the countdown sends what was already said', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.say('Usa Supabase');
+  h.conv.setMuted(true);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Usa Supabase']);
 });
 
 test('a low-confidence recognition is not sent', () => {
@@ -279,4 +287,56 @@ test('typed text sent while a spoken draft is pending keeps both', () => {
   h.say('Usa Supabase');
   h.conv.submitTyped('y el plan gratuito.');
   assert.deepEqual(h.events('commit').map(c => c.text), ['Usa Supabase y el plan gratuito.']);
+});
+
+// ── Barge-in with echo cancellation (capture "aec"): act on the voice detector, not on words ─────
+
+function speakingCall(h) {
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall());
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'He terminado el cambio.' });
+  return id;
+}
+
+test('aec: the voice ducks at once and stops if the user keeps talking', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck'], 'no waiting for Whisper');
+  h.advance(BARGE_CONFIRM_MS);
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
+  const duck = h.events('metric').find(m => m.name === 'bargein.duck_ms');
+  assert.equal(duck.ms, 90, 'from the onset of the voice');
+});
+
+test('aec: a cough only ducks for a moment', () => {
+  const h = harness();
+  speakingCall(h);
+  const failures = [];
+  h.conv.on('failure', f => failures.push(f));
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  h.advance(120);
+  h.conv.stt({ type: 'speech', state: 'end', silence_ms: 60 });
+  h.advance(1000);
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'unduck']);
+  assert.equal(h.conv.speaking(), true, 'Claude goes on');
+  assert.deepEqual(failures, ['false_speech_start']);
+});
+
+test('aec: words while ducked stop Claude before the confirmation time', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  h.advance(100);
+  h.conv.stt({ type: 'partial', text: 'espera' });
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
+});
+
+test('without aec, the voice detector alone never stops Claude (it may be its own echo)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  h.advance(1000);
+  assert.equal(h.events('tts').length, 0);
 });

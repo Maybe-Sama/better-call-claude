@@ -19,6 +19,7 @@ let sttListening = false;
 let micLevel = 0;
 let lastSpokenText = '';
 // Snapshot of the conversation state from the main process (VoiceConversation.snapshot()).
+let adopting = null; // pending adoptDraft() (see renderActive)
 let voiceUi = { turn: 'idle', draft: '', partial: '', deadlineIn: null, holding: false, lowConfidence: false };
 let callStartedAt = null;
 let clockTimer = null;
@@ -136,7 +137,7 @@ function renderActive(call) {
     <div class="live-caption" id="liveCaption">${liveCaptionHtml(call)}</div>
     <div class="call-controls">
       <div class="input-row">
-        <button id="muteBtn" class="mic-btn ${muted ? 'muted' : ''}" title="${muted ? 'Activar micrófono' : 'Silenciar micrófono'}" aria-pressed="${muted}">${muted ? '⌁' : '●'}</button>
+        <button id="muteBtn" class="mic-btn ${muted ? 'muted' : ''}" title="${muted ? 'Activar micrófono' : 'Silenciar micrófono'}" aria-label="${muted ? 'Activar micrófono' : 'Silenciar micrófono'}" aria-pressed="${muted}">${muted ? '⌁' : '●'}</button>
         <input id="textInput" class="text-input" type="text" autocomplete="off" placeholder="${answering ? 'Escribe o corrige lo dictado…' : 'Añade o corrige algo para Claude…'}"/>
         <button id="sendBtn" class="send-btn">Enviar</button>
       </div>
@@ -170,12 +171,17 @@ function renderActive(call) {
   }
   // Starting to type takes over the voice draft so a misheard word can be corrected before sending;
   // while the box has text, what the user says is appended to it.
-  const adoptVoiceDraft = async () => {
-    if (!voiceUi.draft && !voiceUi.partial) return;
-    const spoken = await window.agentCall.adoptDraft();
-    if (!spoken) return;
-    input.value = input.value.trim() ? `${input.value.trim()} ${spoken}` : spoken;
-    window.agentCall.setTyping(true);
+  // One adoption at a time, and Send waits for it, so dictated words are never sent twice or reordered.
+  const adoptVoiceDraft = () => {
+    if (adopting || (!voiceUi.draft && !voiceUi.partial)) return adopting;
+    adopting = window.agentCall.adoptDraft().then(spoken => {
+      if (!spoken) return;
+      const box = document.getElementById('textInput');
+      if (!box) return;
+      box.value = box.value.trim() ? `${box.value.trim()} ${spoken}` : spoken;
+      window.agentCall.setTyping(true);
+    }).catch(() => {}).finally(() => { adopting = null; });
+    return adopting;
   };
   input.onfocus = adoptVoiceDraft;
   input.onkeydown = (e) => {
@@ -185,6 +191,7 @@ function renderActive(call) {
   input.oninput = () => window.agentCall.setTyping(Boolean(input.value.trim()));
   // Enter with an empty box sends the spoken draft now. While Claude works, text is queued for it.
   const send = async () => {
+    if (adopting) await adopting;
     const value = input.value.trim();
     const current = activeCall();
     if (!current || (!value && !voiceUi.draft)) return;
@@ -311,12 +318,21 @@ function setTts(value) {
 // available, Chromium's Windows voices are used instead.
 let ttsEngine = 'browser';
 let playback = { id: null, queue: [], current: null, done: false };
+// The user started talking over Claude (echo-cancelled capture): lower the voice until it is clear.
+const DUCK_VOLUME = 0.2;
+let ducked = false;
+
+function setDucked(on) {
+  ducked = on;
+  for (const el of [playback.current, ...(playback.queue || [])]) if (el) el.volume = on ? DUCK_VOLUME : 1;
+}
 
 function progress(event) { try { window.agentCall.ttsProgress(event); } catch {} }
 
 // The main process decides what Claude says (id + text); this window plays it.
 function speak(id, text) {
   stopSpeech();
+  ducked = false;
   const spoken = String(text || '').replace(/\s+/g, ' ').trim();
   if (!spoken) { progress({ type: 'end', id }); return; }
   setTts(true);
@@ -410,6 +426,7 @@ function playNextChunk(id) {
   if (!el) { maybeFinishPlayback(); return; }
   playback.current = el;
   el.playbackRate = voiceRate;
+  el.volume = ducked ? DUCK_VOLUME : 1;
   progress({ type: 'chunk', id, seq: el.agentSeq, text: el.agentText });
   const next = () => {
     URL.revokeObjectURL(el.src);
@@ -466,7 +483,8 @@ window.agentCall.onTts(data => {
   if (data.type === 'ready') ttsEngine = 'kokoro'; // any worker engine (kokoro or edge) streams audio here
   else if (data.type === 'unavailable') {
     ttsEngine = 'browser';
-    if (playback.id && !playback.ack) { const { id } = playback; const text = lastSpokenText; discardPlayback(); speakWithBrowser(id, text); }
+    if (playback.id && playback.ack) { const { id } = playback; discardPlayback(); progress({ type: 'end', id }); setTts(false); }
+    else if (playback.id) { const { id } = playback; const text = lastSpokenText; discardPlayback(); speakWithBrowser(id, text); }
   } else if (data.type === 'audio') playAudioChunk(data);
   else if (data.type === 'done' && data.id === playback.id) {
     if (!data.chunks && !data.interrupted && !playback.ack) {
@@ -590,7 +608,8 @@ function bindQuickAnswers(call) {
 
 window.agentCall.onVoice(cmd => {
   if (cmd.cmd === 'speak') speak(cmd.id, cmd.text);
-  else if (cmd.cmd === 'stop') stopSpeech();
+  else if (cmd.cmd === 'stop') { stopSpeech(); ducked = false; }
+  else if (cmd.cmd === 'duck' || cmd.cmd === 'unduck') setDucked(cmd.cmd === 'duck');
   else if (cmd.cmd === 'ack') playAck(cmd.id);
   else if (cmd.cmd === 'error') showBanner(cmd.message);
   else if (cmd.cmd === 'append') {

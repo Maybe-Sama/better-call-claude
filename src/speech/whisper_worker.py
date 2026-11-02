@@ -11,6 +11,7 @@ emitted as "final". {"type":"speech","state":"start"|"end"} lets the app time "1
 Nothing is written to disk.
 """
 import argparse
+import base64
 import json
 import math
 import os
@@ -321,9 +322,10 @@ def pick_input_device(sd, wanted):
     return wasapi[0] if wasapi else matches[0][0]
 
 
-def run_mic(segmenter, mic=""):
-    import sounddevice as sd
-
+def run_mic(segmenter, mic="", source="device"):
+    """source "device": the microphone through sounddevice (no echo cancellation).
+    source "stdin": 16 kHz mono int16 PCM sent by AgentCall as {"pcm": base64} lines — captured by
+    Electron with Chromium's echo cancellation, so Claude's own voice is removed before Whisper hears it."""
     frames = queue.Queue()
     listening = threading.Event()
     stop = threading.Event()
@@ -335,7 +337,14 @@ def run_mic(segmenter, mic=""):
                     msg = json.loads(line)
                 except ValueError:
                     continue
-                if msg.get("cmd") == "context":
+                if "pcm" in msg:
+                    if listening.is_set():
+                        try:
+                            pcm = np.frombuffer(base64.b64decode(msg["pcm"]), dtype="<i2").astype(np.float32) / 32768.0
+                            frames.put(pcm)
+                        except (ValueError, TypeError):
+                            pass
+                elif msg.get("cmd") == "context":
                     segmenter.t.set_context(msg.get("text", ""), msg.get("hotwords", ""))
                 continue
             cmd = line.strip().lower()
@@ -348,6 +357,13 @@ def run_mic(segmenter, mic=""):
         stop.set()
 
     threading.Thread(target=reader, daemon=True).start()
+
+    if source == "stdin":
+        emit({"type": "mic", "name": "AgentCall (cancelación de eco)"})
+        consume(segmenter, frames, listening, stop, SAMPLE_RATE)
+        return
+
+    import sounddevice as sd
 
     device = pick_input_device(sd, mic)
     if device is not None:
@@ -363,34 +379,39 @@ def run_mic(segmenter, mic=""):
             frames.put(indata[:, 0].copy())
 
     block = int(device_rate * FRAME / SAMPLE_RATE)
+    with sd.InputStream(device=device, samplerate=device_rate, channels=1, dtype="float32", blocksize=block, callback=callback):
+        consume(segmenter, frames, listening, stop, device_rate)
+
+
+def consume(segmenter, frames, listening, stop, device_rate):
+    """Feeds captured audio to the segmenter in 30 ms frames until stdin closes."""
     pending = np.zeros(0, dtype=np.float32)
     was_listening = False
-    with sd.InputStream(device=device, samplerate=device_rate, channels=1, dtype="float32", blocksize=block, callback=callback):
-        while not stop.is_set():
-            if was_listening and not listening.is_set():
-                segmenter.cancel()  # paused: drop the utterance and anything still being transcribed
-                pending = np.zeros(0, dtype=np.float32)
-                while not frames.empty():  # audio captured just before the pause belongs to no one
-                    try:
-                        frames.get_nowait()
-                    except queue.Empty:
-                        break
-            was_listening = listening.is_set()
-            try:
-                chunk = frames.get(timeout=0.2)
-            except queue.Empty:
-                continue
-            if not listening.is_set():
-                continue
-            if device_rate != SAMPLE_RATE:
-                n = int(round(len(chunk) * SAMPLE_RATE / device_rate))
-                chunk = np.interp(np.linspace(0, len(chunk) - 1, n), np.arange(len(chunk)), chunk).astype(np.float32)
-            if MIC_GAIN != 1.0:
-                chunk = chunk * MIC_GAIN
-            pending = np.concatenate([pending, chunk])
-            while len(pending) >= FRAME:
-                segmenter.feed(pending[:FRAME])
-                pending = pending[FRAME:]
+    while not stop.is_set():
+        if was_listening and not listening.is_set():
+            segmenter.cancel()  # paused: drop the utterance and anything still being transcribed
+            pending = np.zeros(0, dtype=np.float32)
+            while not frames.empty():  # audio captured just before the pause belongs to no one
+                try:
+                    frames.get_nowait()
+                except queue.Empty:
+                    break
+        was_listening = listening.is_set()
+        try:
+            chunk = frames.get(timeout=0.2)
+        except queue.Empty:
+            continue
+        if not listening.is_set():
+            continue
+        if device_rate != SAMPLE_RATE:
+            n = int(round(len(chunk) * SAMPLE_RATE / device_rate))
+            chunk = np.interp(np.linspace(0, len(chunk) - 1, n), np.arange(len(chunk)), chunk).astype(np.float32)
+        if MIC_GAIN != 1.0:
+            chunk = chunk * MIC_GAIN
+        pending = np.concatenate([pending, chunk])
+        while len(pending) >= FRAME:
+            segmenter.feed(pending[:FRAME])
+            pending = pending[FRAME:]
 
 
 def main():
@@ -406,6 +427,7 @@ def main():
     parser.add_argument("--wav", default="")
     parser.add_argument("--realtime", action="store_true", help="testing: feed --wav at real-time speed")
     parser.add_argument("--mic", default=os.environ.get("AGENTCALL_MIC", ""))
+    parser.add_argument("--source", default="device", choices=["device", "stdin"])
     parser.add_argument("--context", default="", help="testing: context text")
     parser.add_argument("--hotwords", default="", help="testing: hotwords")
     args = parser.parse_args()
@@ -436,7 +458,7 @@ def main():
         if args.wav:
             run_wav(args, segmenter)
         else:
-            run_mic(segmenter, args.mic)
+            run_mic(segmenter, args.mic, args.source)
     except Exception as exc:
         emit({"type": "error", "engine": "whisper", "fatal": True, "message": f"Micrófono: {exc}"[:400],
               "hint": "Comprueba el micrófono predeterminado de Windows o usa el campo de texto."})

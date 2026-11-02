@@ -20,6 +20,9 @@ const { LegacyEndpointer } = require('./endpointing');
 const HOLD_MS = 8000;          // a lone "espera" while Claude works is delivered as an interrupt after this
 const ECHO_TAIL_MS = 4000;     // after Claude stops speaking, a recognition may still be its echo (Whisper is ~1 s late)
 const MIN_CONFIDENCE = 0.4;    // below this, recognitions are noise/echo guesses ("Orlando" 0.11)
+// With echo cancellation the voice detector is trusted: Claude ducks at the first speech frame and goes
+// silent if the voice lasts this long (or words appear); shorter sounds (a cough) restore the volume.
+const BARGE_CONFIRM_MS = 250;
 const ACK_TEXT = { vale: 'Vale.', entendido: 'Entendido.', momento: 'Un momento.' };
 
 function fold(text) {
@@ -74,13 +77,20 @@ class VoiceConversation extends EventEmitter {
     this.counter = 0;
     this.endpointTimer = null;
     this.holdTimer = null;
+    this.echoCancelled = false; // microphone captured with acoustic echo cancellation
+    this.ducked = false;
+    this.bargeTimer = null;
     this._resetDraft();
   }
+
+  // Capture "aec" confirmed by the window: the microphone no longer hears Claude's own voice.
+  setEchoCancelled(value) { this.echoCancelled = Boolean(value); }
 
   // ── Inputs ──────────────────────────────────────────────────────────────
 
   setCall(call) {
     const previous = this.call?.id || null;
+    if ((call?.id || null) !== previous && this.call) this._flushDraft('la llamada ha terminado'); // to the call/session it belonged to
     this.call = call || null;
     if ((call?.id || null) !== previous) {
       // Another call (or none): nothing of the previous one may keep playing or count as echo.
@@ -99,9 +109,19 @@ class VoiceConversation extends EventEmitter {
   }
 
   setMuted(value) {
+    if (value && !this.muted) this._flushDraft('micrófono silenciado');
     this.muted = Boolean(value);
     if (this.muted) this._resetDraft();
     this._ui();
+  }
+
+  // Recognised words still waiting for the end of the turn are sent now instead of being dropped
+  // (hang-up, another call, mute). An unfinished partial is not: it was never a confirmed transcript.
+  _flushDraft(reason) {
+    const text = [this.prefix, this.policy ? this.policy.text() : ''].filter(Boolean).join(' ').trim();
+    if (!text) return;
+    this._debug(`${reason}: envío lo que ya habías dicho`);
+    this._commit(text, 'voice');
   }
 
   listening() { return Boolean(this.call) && !this.muted; }
@@ -166,10 +186,25 @@ class VoiceConversation extends EventEmitter {
     this._clearHoldTimer();
     this._policy().speechStart(this.now());
     this._arm();
+    if (this.echoCancelled && this.playing && !this.playing.ack) {
+      this._duck();
+      this._clearBargeTimer();
+      this.bargeTimer = this.setTimer(() => { this.bargeTimer = null; this._bargeIn('voz sostenida'); }, BARGE_CONFIRM_MS);
+    }
   }
 
   _speechEnd(ev) {
     this.userSpeaking = false;
+    if (this.bargeTimer) {
+      // Too short to be someone talking (cough, knock): Claude goes on at full volume.
+      this._clearBargeTimer();
+      if (this.ducked) {
+        this.ducked = false;
+        this.emit('tts', { action: 'unduck' });
+        this.emit('failure', 'false_speech_start');
+        this._debug('ruido breve: Claude sigue hablando');
+      }
+    }
     this.speechEndAt = this.now() - (Number(ev.silence_ms) || 0);
     this._policy().speechEnd(this.now());
     this._arm();
@@ -180,7 +215,8 @@ class VoiceConversation extends EventEmitter {
   _partial(text) {
     if (this.speaking() || this._inEchoTail()) {
       if (this._isEcho(text)) return; // Claude hearing itself through the speakers
-      if (this.speaking() && contentWords(text).length >= 2) this._bargeIn('parcial');
+      const words = fold(text).split(' ').filter(Boolean).length;
+      if (this.speaking() && (this.ducked ? words >= 1 : contentWords(text).length >= 2)) this._bargeIn('parcial');
     }
     if (!this.sawPartial && this.speechStartAt) this._metric('stt.first_partial_ms', this.now() - this.speechStartAt);
     this.sawPartial = true;
@@ -247,7 +283,21 @@ class VoiceConversation extends EventEmitter {
   }
 
   // The user talked over Claude: silence at once, remember where it was cut.
+  _duck() {
+    if (this.ducked) return;
+    this.ducked = true;
+    if (this.speechStartAt) this._metric('bargein.duck_ms', this.now() - this.speechStartAt);
+    this.emit('tts', { action: 'duck' });
+  }
+
+  _clearBargeTimer() {
+    if (this.bargeTimer) this.clearTimer(this.bargeTimer);
+    this.bargeTimer = null;
+  }
+
   _bargeIn(reason) {
+    this._clearBargeTimer();
+    this.ducked = false;
     if (!this.playing) return;
     this._debug(`interrumpe a Claude (${reason})`);
     if (this.speechStartAt) this._metric('bargein.stop_ms', this.now() - this.speechStartAt);
@@ -262,6 +312,8 @@ class VoiceConversation extends EventEmitter {
   }
 
   _finishTts(interrupted) {
+    this._clearBargeTimer();
+    this.ducked = false;
     if (!this.playing) return;
     this.lastPlayed = { ...this.playing, endedAt: this.now(), interrupted };
     this.playing = null;
@@ -450,4 +502,4 @@ class VoiceConversation extends EventEmitter {
   _debug(message) { this.emit('debug', message); }
 }
 
-module.exports = { VoiceConversation, classifyUrgency, contentWords, HOLD_MS, ACK_TEXT };
+module.exports = { VoiceConversation, classifyUrgency, contentWords, HOLD_MS, ACK_TEXT, BARGE_CONFIRM_MS };

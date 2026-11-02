@@ -231,13 +231,44 @@ class CallBroker extends EventEmitter {
     const call = this.calls.get(callId);
     const text = cleanText(rawText, 4000);
     if (!call || !text) return { ok: false, error: 'No hay una llamada activa o el texto está vacío.' };
-    const item = { id: crypto.randomUUID(), text, urgency: urgency === 'interrupt' ? 'interrupt' : 'queue', at: this.now() };
-    const session = this._session({ session_id: call.sessionId });
-    (session.pendingSpeech ||= []).push(item);
+    const item = this._queueSpeech(call.sessionId, text, urgency);
     call.messages.push({ role: 'user', text, at: item.at, kind: 'queued', urgency: item.urgency, pendingId: item.id, delivered: false });
     call.updatedAt = this.now();
     this._changed('message', { id: call.id, message: call.messages.at(-1) });
     return { ok: true, queued: true, urgency: item.urgency };
+  }
+
+  // Same, for a session whose call is already gone (the user hung up mid-sentence).
+  queueSessionSpeech(sessionId, rawText, urgency = 'queue') {
+    const text = cleanText(rawText, 4000);
+    if (!sessionId || !text) return { ok: false, error: 'No hay sesión o el texto está vacío.' };
+    const item = this._queueSpeech(sessionId, text, urgency);
+    this._changed();
+    return { ok: true, queued: true, urgency: item.urgency };
+  }
+
+  _queueSpeech(sessionId, text, urgency) {
+    const item = { id: crypto.randomUUID(), text, urgency: urgency === 'interrupt' ? 'interrupt' : 'queue', at: this.now() };
+    const session = this._session({ session_id: sessionId });
+    (session.pendingSpeech ||= []).push(item);
+    return item;
+  }
+
+  // The hook response carrying the speech could not be written (Claude closed the request): put it
+  // back, first in line, so the next hook delivers it.
+  restorePendingSpeech(sessionId) {
+    const session = this.sessions.get(sessionId);
+    const items = session?.inFlight || [];
+    if (!items.length) return 0;
+    session.inFlight = [];
+    session.pendingSpeech = [...items, ...(session.pendingSpeech || [])];
+    const ids = new Set(items.map(i => i.id));
+    for (const call of this.calls.values()) {
+      if (call.sessionId !== sessionId) continue;
+      for (const m of call.messages || []) if (ids.has(m.pendingId)) m.delivered = false;
+    }
+    this._changed();
+    return items.length;
   }
 
   pendingSpeech(sessionId) {
@@ -250,6 +281,7 @@ class CallBroker extends EventEmitter {
     const items = session?.pendingSpeech || [];
     if (!items.length) return [];
     session.pendingSpeech = [];
+    session.inFlight = items; // until the hook response is written (restorePendingSpeech)
     const ids = new Set(items.map(i => i.id));
     for (const call of this.calls.values()) {
       if (call.sessionId !== sessionId) continue;
@@ -295,7 +327,8 @@ class CallBroker extends EventEmitter {
     // with their words. Denying is the safe side; Claude can ask again after reading them.
     if ((this.sessions.get(payload.session_id)?.pendingSpeech || []).some(i => i.urgency === 'interrupt')) {
       const items = this.takePendingSpeech(payload.session_id);
-      responder?.({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: `${speechNote(items)} Por eso no se ha ejecutado esta acción.`, interrupt: false } } });
+      const sent = responder?.({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: `${speechNote(items)} Por eso no se ha ejecutado esta acción.`, interrupt: false } } });
+      if (sent === false) this.restorePendingSpeech(payload.session_id);
       return null;
     }
     const described = describePermission(payload);
@@ -322,7 +355,8 @@ class CallBroker extends EventEmitter {
     // Claude continues with it right away instead of ending the turn (its result is shown, not read).
     const pending = failure ? [] : this.takePendingSpeech(sessionId);
     if (pending.length) {
-      responder?.({ hookSpecificOutput: { hookEventName: 'Stop', additionalContext: speechNote(pending, { unheard: true }) } });
+      const sent = responder?.({ hookSpecificOutput: { hookEventName: 'Stop', additionalContext: speechNote(pending, { unheard: true }) } });
+      if (sent === false) this.restorePendingSpeech(sessionId);
       session.quietStop = false;
       if (!sameActive) return null;
       const text = cleanText(payload.last_assistant_message || '', 20_000);
