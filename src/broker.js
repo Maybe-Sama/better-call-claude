@@ -7,6 +7,7 @@ const { toSpeech } = require('./speech-text');
 
 const SNOOZE_MINUTES = [1,2,3,4,5,6,7,8,9,10,15,20,30,45,60,120];
 const RING_TIMEOUT_MS = 30_000;
+const STREAM_GRACE_MS = 10 * 60_000; // a controlled conversation hung up while idle stays this long
 // A turn shorter than this, with no question/permission in between, is treated as routine chat the
 // user is watching in the terminal: the Stop hook is released immediately and no result call rings.
 const MIN_RESULT_TURN_MS = 20_000;
@@ -119,9 +120,12 @@ class CallBroker extends EventEmitter {
     now = () => Date.now(),
     readTitle = () => '',
     defaultMode = 'off',
+    streamGraceMs = STREAM_GRACE_MS,
   } = {}) {
     super();
     this.ringTimeoutMs = ringTimeoutMs;
+    this.streamGraceMs = streamGraceMs;
+    this.endTimers = new Map(); // ended controlled call → timer that finally closes it
     this.minResultMs = minResultMs;
     this.now = now;
     this.readTitle = readTitle;
@@ -446,6 +450,7 @@ class CallBroker extends EventEmitter {
     if (!call) return false;
     if (this.activeId && this.activeId !== id) return false;
     this._clearRingTimer(id);
+    this._clearEndTimer(id);
     this._clearSnoozeTimer(id);
     for (const other of this.calls.values()) {
       if (other.id !== id && other.status === 'ringing') this._moveToQueued(other);
@@ -490,10 +495,11 @@ class CallBroker extends EventEmitter {
     if (call.stream) {
       // Like a phone: hanging up does not stop Claude. A prompt still unanswered waits in Pendientes;
       // a Claude still working goes on and calls back (ringStreamCall) when it finishes or needs the
-      // user; only an idle conversation ends (its controller then closes Claude).
+      // user. An idle conversation stays a while as "Colgada" (one click brings it back), then ends
+      // and its controller closes Claude (the conversation can still be continued from its transcript).
       if (call.responder && !call.resolved) call.status = 'pending';
       else if (call.claudeBusy) call.status = 'parked';
-      else this._deleteCall(id);
+      else this._endStreamCall(call);
       if (this.calls.has(id)) call.updatedAt = this.now();
     } else if (call.responder && !call.resolved && call.interactionKind === 'stop') {
       // Hanging up a result means "done": let Claude stop.
@@ -980,7 +986,27 @@ class CallBroker extends EventEmitter {
   _deleteCall(id) {
     this._clearRingTimer(id);
     this._clearSnoozeTimer(id);
+    this._clearEndTimer(id);
     this.calls.delete(id);
+  }
+
+  _endStreamCall(call) {
+    call.status = 'ended';
+    this._clearEndTimer(call.id);
+    const timer = setTimeout(() => {
+      this.endTimers.delete(call.id);
+      if (this.calls.get(call.id)?.status !== 'ended') return;
+      this._deleteCall(call.id);
+      this._changed('ended', { id: call.id });
+    }, this.streamGraceMs);
+    timer.unref?.();
+    this.endTimers.set(call.id, timer);
+  }
+
+  _clearEndTimer(id) {
+    const timer = this.endTimers.get(id);
+    if (timer) clearTimeout(timer);
+    this.endTimers.delete(id);
   }
 
   _changed(event = 'state', detail = {}) {

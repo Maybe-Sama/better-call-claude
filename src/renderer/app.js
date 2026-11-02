@@ -31,7 +31,7 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch])); }
 function activeCall() { return state.calls.find(c => c.id === state.activeId) || null; }
 function ringingCall() { return state.calls.find(c => c.status === 'ringing') || null; }
-function listedCalls() { return state.calls.filter(c => ['onhold', 'parked', 'pending', 'snoozed', 'queued'].includes(c.status)); }
+function listedCalls() { return state.calls.filter(c => ['onhold', 'parked', 'pending', 'snoozed', 'queued', 'ended'].includes(c.status)); }
 
 function callLabel(call) {
   if (call.type === 'error') return 'ERROR';
@@ -40,7 +40,7 @@ function callLabel(call) {
   if (call.interactionKind === 'permission') return 'PERMISO NECESARIO';
   return 'NECESITA RESPUESTA';
 }
-function statusLabel(status) { return ({ onhold: 'En espera', parked: 'Trabajando', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
+function statusLabel(status) { return ({ ended: 'Colgada', onhold: 'En espera', parked: 'Trabajando', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
 function timeAgo(ts) {
   const diff = Math.max(0, Date.now() - ts);
   if (diff < 60_000) return 'ahora';
@@ -309,8 +309,9 @@ function callCardHtml(call) {
   if (call.status === 'parked') extra = 'te llamará al terminar';
   // On hold nothing rings: the card says what Claude is doing so the user knows when to come back.
   if (call.status === 'onhold') extra = call.interactionKind === 'permission' || call.interactionKind === 'ask' ? 'Claude te necesita' : call.awaitingClaude ? 'Claude sigue trabajando' : 'Claude te espera';
+  if (call.status === 'ended') extra = 'puedes volver unos minutos';
   const back = call.status === 'parked' || call.status === 'onhold';
-  const action = call.status === 'snoozed' ? '' : `<span class="card-action">${back ? 'Volver a la llamada' : 'Devolver llamada'} →</span>`;
+  const action = call.status === 'snoozed' ? '' : `<span class="card-action">${back ? 'Volver a la llamada' : call.status === 'ended' ? 'Volver a llamar' : 'Devolver llamada'} →</span>`;
   const interactive = call.status !== 'snoozed' ? 'role="button" tabindex="0"' : 'aria-disabled="true"';
   return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}" ${interactive}>
     <div class="card-top"><div class="card-title">${esc(call.title)}</div><div class="card-status">${esc(statusLabel(call.status))}</div></div>

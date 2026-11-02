@@ -151,12 +151,24 @@ test('AskUserQuestion is answered by voice with the chosen option', async () => 
   assert.equal(session.decisions[0].input.answers['¿Qué base de datos?'], 'Neon');
 });
 
-test('hanging up while Claude is idle closes the session', async () => {
-  const { broker, ctl, session } = setup();
+// Live test: "he dado varias veces a colgar y se ha puesto en espera, pero la última se ha cerrado del todo".
+test('hanging up while Claude is idle keeps the conversation a while, then closes it', async () => {
+  const broker = new CallBroker({ defaultMode: 'off', streamGraceMs: 30 });
+  const session = new FakeSession();
+  const ctl = new StreamCallController({ broker, voice: { streamTurnStart() {}, streamSentence() {}, streamTurnEnd() {} }, createSession: () => session, createChunker: chunker });
   const call = await ctl.start({ cwd: 'C:/work/app' });
   broker.hangup(call.id);
   await new Promise(r => setImmediate(r));
-  assert.equal(session.closed, true);
+  assert.equal(session.closed, false, 'one click brings it back');
+  assert.equal(broker.getSnapshot().calls[0].status, 'ended');
+  assert.equal(broker.answer(call.id), true);
+  assert.equal(ctl.say(call.id, 'Una cosa más.', 'queue').ok, true);
+  session.busy = false;
+  session.emit('turn-start');
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  broker.hangup(call.id);
+  await new Promise(r => setTimeout(r, 60));
+  assert.equal(session.closed, true, 'closed after the grace period');
   assert.equal(ctl.owns(call.id), false);
 });
 
@@ -366,12 +378,11 @@ test('picking up again mid-message: first what was missed, then Claude goes on l
 
 test('a session AgentCall drives never makes calls from its own hooks (#7)', async () => {
   const { broker, ctl, session } = setup();
-  const call = await ctl.start({ cwd: 'C:/work/app' });
+  await ctl.start({ cwd: 'C:/work/app' });
   broker.setSessionMode(session.sessionId, 'on'); // e.g. /saul on in that conversation, earlier
   assert.equal(broker.sessionMode(session.sessionId, ''), 'off');
   assert.equal(broker.sessionMode(session.sessionId, 'on'), 'on', 'the controller\'s own prompts');
-  broker.hangup(call.id);
-  await tick();
+  await ctl.closeAll();
   assert.equal(broker.sessionMode(session.sessionId, ''), 'on', 'back to normal once AgentCall lets it go');
 });
 

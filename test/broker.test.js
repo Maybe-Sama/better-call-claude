@@ -584,10 +584,12 @@ test('a permission inside a controlled call merges into it and resolves through 
   assert.equal(broker.getSnapshot().calls[0].awaitingClaude, true, 'Claude goes on working');
 });
 
-test('hanging up a controlled call removes it', () => {
-  const broker = new CallBroker({ defaultMode: 'off' });
+test('hanging up an idle controlled call keeps it as "Colgada" for a while, then removes it', async () => {
+  const broker = new CallBroker({ defaultMode: 'off', streamGraceMs: 20 });
   const call = broker.openStreamCall({ sessionId: 'st3', cwd: 'C:/work/app', title: 'app' });
   broker.hangup(call.id);
-  assert.equal(broker.getSnapshot().calls.length, 0);
   assert.equal(broker.activeId, null);
+  assert.equal(broker.getSnapshot().calls[0].status, 'ended');
+  await new Promise(r => setTimeout(r, 50));
+  assert.equal(broker.getSnapshot().calls.length, 0);
 });
