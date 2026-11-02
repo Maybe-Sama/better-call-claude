@@ -120,7 +120,9 @@ async function main() {
     const message = `Frase ${i} de ${SENTENCES.length}. Léela en voz alta${sentence.includes('(pausa)') ? ', con una pausa larga donde pone pausa' : ''}:\n\n> ${sentence}`;
     if (!first) await quiet(); // a cut-off sentence's rest must not land on the next one
     let pending = stop(message);
-    if (first) {
+    if (first && process.argv.includes('--ring')) {
+      first = false; // the person answers the ringing call (or calls back from Pendientes)
+    } else if (first) {
       await sleep(1200);
       await cdp('(async()=>{const s=await window.agentCall.getState();const c=s.calls.find(x=>x.status==="ringing");if(c)await window.agentCall.answer(c.id);return true})()');
       first = false;

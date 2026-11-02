@@ -106,7 +106,7 @@ test('adaptive: never decides while the transcript of a phrase that just ended i
   p.final(2000, 'Vale pues prueba Google it.'); // Whisper heard "y" as "it."
   p.speechStart(1800); // …but the user was already saying "un momento"
   p.speechEnd(2600);
-  assert.equal(p.deadline > 2600 + 4000, true, 'waits for the new transcript, with a safety cap');
+  assert.equal(p.deadline > 2600 + 2500, true, 'waits for the new transcript, with a safety cap');
   p.final(3900, 'un momento...');
   assert.ok(p.deadline - 3900 >= 2500, 'and "un momento…" keeps waiting');
 });
@@ -115,7 +115,7 @@ test('adaptive: a phrase too short to transcribe (or rejected) does not block th
   const p = new AdaptiveEndpointer({ kind: 'stop' });
   p.speechStart(0);
   p.speechEnd(1000);
-  p.final(1600, 'Haz el cambio.');
+  p.final(1600, 'Haz el cambio en la base de datos de producción.');
   p.speechStart(1700);
   p.speechEnd(2100, { expectFinal: false }); // 0.2 s of voice: the worker sends no transcript
   assert.ok(p.deadline - 2100 <= 1000, 'decided on what it has, without waiting for a transcript');
@@ -167,7 +167,7 @@ test('adaptive: a long, multi-sentence turn gets more patience between sentences
     p.speechEnd(end + 700, { silenceMs: 700 });
     p.final(end + 1300, text);
   };
-  phrase(0, 4000, 'La idea es sencilla.');
+  phrase(0, 4000, 'La idea es sencilla y la quiero para mañana.');
   const firstFloor = p.deadline - 4000;
   phrase(5000, 9000, 'La pantalla de pagos tiene que enseñar el saldo arriba del todo.');
   phrase(10000, 14000, 'Debajo, el historial de los últimos seis meses.');

@@ -84,7 +84,8 @@ const ADAPTIVE = {
   unfinishedMs: 4500,   // conjunction, filler, comma, "…", "luego", "un momento": the user is still thinking
   perPhraseMs: 700,     // a turn of several phrases (explaining, reading) gets this much more patience per phrase
   maxPhraseBonusMs: 2000,
-  finalTimeoutMs: 6000, // safety: a transcript that never arrives does not block the turn forever
+  finalTimeoutMs: 3000, // a transcript that has not come by then (noise being transcribed) does not hold the turn
+  shortCommandFloorMs: 2500, // a lone short command in a free reply ("Ponlo azul.") is often corrected after a pause
   minConfidence: 0.4,
 };
 
@@ -101,6 +102,8 @@ const DOUBTFUL_CONFIDENCE = 0.6;
 // The last phrase only asks for time.
 const HOLD_TAIL = /(^|[.,;!?]\s*)(no,? )?(espera|un momento|un segundo|dejame pensar|deja que piense|a ver|eh|em|mm|pues|bueno)[\s.,…!]*$/;
 const SHORT_ANSWER = /^(si|no|vale|ok|okay|claro|venga|dale|adelante|de acuerdo|perfecto|correcto|hazlo|mejor no|para nada|ninguna|ninguno|todas|todos|(la |el |opcion )?(primera|segunda|tercera|cuarta|ultima|primero|segundo|tercero|cuarto|ultimo|uno|dos|tres|cuatro|[a-e]))\b/;
+
+function wordCount(text) { return fold(text).replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter(Boolean).length; }
 
 // Whisper writes a lone Spanish "sí" as the letter "C." surprisingly often.
 function fixShortAnswer(text, options = []) {
@@ -177,6 +180,8 @@ class AdaptiveEndpointer extends LegacyEndpointer {
     } else if (/[.!?]["»)]?\s*$/.test(last)) {
       wait = ADAPTIVE.completeMs;
       floor = answering ? ADAPTIVE.completeFloorMs - 200 : ADAPTIVE.completeFloorMs;
+      // Live tests: "Ponlo azul. (pausa) No, perdona, verde", "Sube esto a producción. (pausa) bueno, no…".
+      if (!answering && this.parts.length === 1 && !/\?\s*$/.test(last) && !this.isShortAnswer(last) && wordCount(last) <= 5) floor = ADAPTIVE.shortCommandFloorMs;
     } else {
       wait = ADAPTIVE.openMs;
       floor = ADAPTIVE.openFloorMs;

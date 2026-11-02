@@ -51,23 +51,25 @@ SPEECH_THRESHOLD = _env_float("AGENTCALL_SPEECH_THRESHOLD", 0.006, 0.0, 0.5)
 
 # Text Whisper is known to invent on silence/noise in Spanish.
 HALLUCINATIONS = re.compile(
-    r"amara\.org|subt[ií]tulos|suscr[ií]bete|gracias por ver|gracias por su atenci[oó]n|"
+    r"amara\.org|subt[ií]tulos|suscr[ií]bete|gracias por ver|gracias por su atenci[oó]n|closed captioning|captioning by|"
+    r"subtitles by|transcribed by|"
     r"m[aá]s informaci[oó]n en|www\.|^\W*$|^\W*gracias\W*$",
     re.IGNORECASE,
 )
 
 # The same word or short group 4+ times in a row is a decoding loop, not speech ("Haz Haz Haz…").
-REPEATS = re.compile(r"\b(\w+(?:[\s,]+\w+){0,3}?)(?:[\s,]+\1\b){3,}", re.IGNORECASE)
+REPEATS = re.compile(r"\b(\w+(?:[\s,]+\w+){0,3}?)(?:[\s,.:;!?¡¿-]+\1\b){3,}", re.IGNORECASE)
 
 
 def collapse_repeats(text):
     return REPEATS.sub(r"\1", text)
 
 
+# Vocabulary only: Whisper copies prompt sentences into what it hears (live test 2026-11-02:
+# "Déjalo Conversación con Claude Code.").
 DEFAULT_PROMPT = (
-    "Conversación con Claude Code sobre un proyecto de software. "
-    "Términos: Claude, Supabase, Vercel, Next.js, React, TypeScript, JavaScript, API, commit, deploy, "
-    "frontend, backend, endpoint, base de datos."
+    "Claude, Supabase, Vercel, Next.js, React, TypeScript, JavaScript, API, commit, deploy, merge, "
+    "frontend, backend, endpoint, webhook, Postgres, SQLite, staging, pull request, base de datos."
 )
 
 out_lock = threading.Lock()
