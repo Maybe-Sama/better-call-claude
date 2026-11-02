@@ -71,5 +71,20 @@ Archivos nuevos: `src/voice/conversation.js`, `src/voice/endpointing.js`, `src/v
 
 ## Estado
 
-- [ ] Fase 1 · [ ] 2 · [ ] 3 · [ ] 4 · [ ] 5 · [ ] 6 · [ ] 7 · [ ] 8
+- [x] 1 instrumentar (laboratorio, tiempos del worker, métricas) · [x] 2 VoiceConversation conectado · [x] 3 entrega en hooks (`PostToolUse` sin validar en real: spike B) · [x] 4 captura con AEC + barge-in en dos pasos (`capture: "aec"`, validado con micro falso de Chromium; falta voz real) · [~] 5 fin de turno adaptativo (por defecto) + final especulativo · [ ] 6 sesión controlada stream-json · [x] 7 estilo de voz en `CALL_RULES` · [~] 8 aceptación §26 automatizada (`test/voice-acceptance.test.js`); falta prueba real repetida
 - Spike stream-json: en curso → `docs/spikes/claude-stream-json.md`
+- Cola de voz: vive en memoria por sesión hasta entregarse (también tras colgar); no se escribe en disco a propósito (serían transcripciones). Se pierde solo si AgentCall se cierra antes de entregarla.
+
+## Línea base (laboratorio, Whisper GPU, voz de prueba Edge, 14 escenarios)
+
+| Medida | Antes (8eb1313) | Adaptativa, fin 0,7 s |
+| --- | --- | --- |
+| Inicio de voz detectado | 60 ms | 61 ms |
+| Primer parcial | 1,5 s | 1,7 s |
+| Barge-in (sin AEC: parcial con 2 palabras) | 1,5 s (p90 4,1) | igual; con AEC: 250 ms desde el inicio de voz |
+| Final tras acabar de hablar | 1,75 s | 2,2 s (GPU compartida en la medición) |
+| Fin de turno → envío | 3,7 s | 2,6 s |
+| Turnos con envío prematuro | 0/14 | 1/14 (corregido después: no decide sin la última transcripción) |
+| Turnos perdidos | 2/14 | 0/14 |
+| WER | 0,24 | 0,04 (contexto de la pregunta) |
+| TTS primer audio (Edge / Kokoro) | 1,8 s / 0,6 s | primer mensaje preparado mientras suena |

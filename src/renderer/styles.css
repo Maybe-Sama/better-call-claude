@@ -139,3 +139,10 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .quick-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .quick-desc { font-size: 10px; font-weight: 500; color: var(--muted); line-height: 1.35; }
 .queued-note { font-size: 10px; color: var(--muted); padding: 0 4px; }
+.metrics-panel { position: fixed; left: 10px; right: 10px; bottom: 10px; z-index: 50; background: rgba(11, 13, 18, 0.96); border: 1px solid #2a3140; border-radius: 10px; padding: 10px 12px; font-size: 11px; color: #d6dbe5; }
+.metrics-panel table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.metrics-panel th, .metrics-panel td { padding: 2px 4px; text-align: right; }
+.metrics-panel td:first-child, .metrics-panel th:first-child { text-align: left; }
+.metrics-head { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; }
+.metrics-head span, .metrics-fail { color: var(--muted); font-weight: 400; }
+.metrics-fail { margin-top: 6px; }

@@ -31,6 +31,8 @@ Interaction rules:
 - An AskUserQuestion answer may be free text instead of an option. If it is itself a question or doubt, answer it first; ask again only if a decision is still needed. Never assume a choice the user did not make.
 - When a turn ends with something the user should hear (a finished piece of work, a blocker, a result), start the final message with one short spoken-style paragraph (1-3 sentences, no markdown, no code, no file paths, no URLs) saying what happened, the outcome and what matters next. Put technical detail after that paragraph. If you need something from the user, say it in the last paragraph.
 - If the user replies during the result call, their reply arrives as additional context of this same session: treat it as a new user request.
+- The user may also speak while you work: those words arrive as additional context ("el usuario te ha dicho / te ha interrumpido por la llamada"). A correction overrides what you were doing; an addition is part of the current task.
+- How the spoken part should sound (it is read aloud on a phone call): natural spoken Spanish, short sentences, the important thing first, one question at a time. If the user asked you something, answer it directly in the first sentence. Never read paths, commands, code, URLs or markdown aloud; never open with filler such as "Claro", "Perfecto" or "Entendido"; no fake enthusiasm. Be brief, but do not drop information the user needs; detail stays in the written text.
 - Do not mention AgentCall or add special tags or boilerplate. Write normally.`;
 
 const CALLS_OFF_NOTE = 'AgentCall voice calls are now disabled for this session. Ignore the earlier call-related rules and interact normally through the terminal.';

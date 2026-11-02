@@ -15,7 +15,9 @@
 // injected `deliver(commit)`, which returns the broker's result. The microphone stays open for the whole
 // call: whatever is said while Claude works is committed as steering, never dropped.
 const { EventEmitter } = require('node:events');
-const { LegacyEndpointer } = require('./endpointing');
+const { AdaptiveEndpointer } = require('./endpointing');
+
+const MIN_TRANSCRIBED_MS = 350; // whisper_worker.py MIN_UTTERANCE_S: shorter phrases get no transcript
 
 const HOLD_MS = 8000;          // a lone "espera" while Claude works is delivered as an interrupt after this
 const ECHO_TAIL_MS = 4000;     // after Claude stops speaking, a recognition may still be its echo (Whisper is ~1 s late)
@@ -54,7 +56,7 @@ class VoiceConversation extends EventEmitter {
     now = () => Date.now(),
     setTimer = (fn, ms) => setTimeout(fn, ms),
     clearTimer = id => clearTimeout(id),
-    policy = kind => new LegacyEndpointer({ kind }),
+    policy = (kind, options) => new AdaptiveEndpointer({ kind, options }),
     deliver = null,
   } = {}) {
     super();
@@ -132,6 +134,7 @@ class VoiceConversation extends EventEmitter {
     else if (ev.type === 'speech' && ev.state === 'end') this._speechEnd(ev);
     else if (ev.type === 'partial') this._partial(String(ev.text || ''));
     else if (ev.type === 'final') this._final(String(ev.text || ''), typeof ev.confidence === 'number' ? ev.confidence : 1);
+    else if (ev.type === 'rejected') this._final('', 0); // the phrase had no words
     else return;
     this._ui();
   }
@@ -182,6 +185,7 @@ class VoiceConversation extends EventEmitter {
     this.userSpeaking = true;
     this.deferredCommit = false; // the user went on talking: the turn is not over
     this.speechStartAt = this.now() - (Number(ev.onset_ms) || 0);
+    this.phraseStartAt = this.speechStartAt; // kept across commits: decides whether a phrase can be echo
     this.sawPartial = false;
     this._clearHoldTimer();
     this._policy().speechStart(this.now());
@@ -206,7 +210,8 @@ class VoiceConversation extends EventEmitter {
       }
     }
     this.speechEndAt = this.now() - (Number(ev.silence_ms) || 0);
-    this._policy().speechEnd(this.now());
+    const expectFinal = !ev.cancelled && (ev.voiced_ms == null || ev.voiced_ms >= MIN_TRANSCRIBED_MS);
+    this._policy().speechEnd(this.now(), { expectFinal });
     this._arm();
     if (!this._draftText() && this.pendingSpeak) this._flushPendingSpeak();
     this._armHold();
@@ -239,7 +244,12 @@ class VoiceConversation extends EventEmitter {
     }
     this.lowConfidence = false;
     if (this.speaking()) this._bargeIn('final');
-    if (this.typing) { this.emit('append', { text }); return; }
+    if (this.typing) {
+      this.emit('append', { text });
+      policy.final(this.now(), '', 0); // the transcript arrived (it went to the box), the turn need not wait for it
+      this._arm();
+      return;
+    }
     policy.final(this.now(), text, confidence);
     this._arm();
   }
@@ -255,6 +265,7 @@ class VoiceConversation extends EventEmitter {
     if (this.spokenKeys.has(key)) return;
     this.spokenKeys.add(key);
     if (this.spokenKeys.size > 500) this.spokenKeys.delete(this.spokenKeys.values().next().value);
+    if (latest.silent) return; // shown in the call, not read (e.g. a result the user already moved past)
     const text = String(latest.speech || latest.text || '').replace(/\s+/g, ' ').trim();
     if (!text) return;
     if (this.userSpeaking || this._draftText()) { this.pendingSpeak = text; return; } // never talk over the user
@@ -324,8 +335,12 @@ class VoiceConversation extends EventEmitter {
   // Without headphones Claude's voice reaches the microphone: a recognition whose words mostly come
   // from what Claude is (or was just) saying is its own echo.
   _isEcho(text) {
+    if (this.echoCancelled) return false; // the microphone no longer hears Claude
     const ref = this.playing || (this._inEchoTail() ? this.lastPlayed : null);
     if (!ref) return false;
+    // A phrase that began after Claude went quiet is the user's, even if it repeats Claude's words
+    // ("¿Supabase o Neon?" → "Neon"). Only voice that started during playback can be its echo.
+    if (!this.playing && this.phraseStartAt > ref.endedAt + 150) return false;
     const heard = contentWords(text);
     if (!heard.length) return Boolean(this.playing);
     const spoken = new Set(contentWords(ref.text));
@@ -359,7 +374,10 @@ class VoiceConversation extends EventEmitter {
   // ── End of turn ─────────────────────────────────────────────────────────
 
   _policy() {
-    if (!this.policy) this.policy = this.makePolicy(this.turn === 'awaitingUser' ? this.kind : 'stop');
+    if (!this.policy) {
+      const options = this.turn === 'awaitingUser' && this.kind === 'ask' ? (this.call?.currentQuestion?.options || []).map(o => o.label) : [];
+      this.policy = this.makePolicy(this.turn === 'awaitingUser' ? this.kind : 'stop', options);
+    }
     return this.policy;
   }
 

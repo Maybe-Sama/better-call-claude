@@ -4,6 +4,8 @@ stdin  (one JSON object per line)
   {"cmd": "speak", "id": "...", "text": "..."}   replaces whatever is being said
   {"cmd": "ack", "id": "...", "phrase": "vale"}  short pre-rendered acknowledgement (vale | entendido | momento)
   {"cmd": "stop"}                                  silence now (the user started talking)
+  {"cmd": "prepare", "text": "..."}               synthesise ahead (while the phone rings); a later speak of
+                                                   the same text plays from this cache at once
 stdout (ASCII JSON lines)
   {"type": "ready"}  {"type": "audio", "id", "seq", "rate", "pcm": base64 int16 mono}  {"type": "done", "id"}  {"type": "error"}
 
@@ -13,6 +15,7 @@ its own window (same device as the ringtone) and can cut it instantly. Nothing i
 """
 import argparse
 import base64
+import collections
 import json
 import os
 import queue
@@ -67,6 +70,15 @@ def sentences(text, max_len=220):
     return out
 
 
+class Prepared:
+    """Audio synthesised ahead of time for one text; filled sentence by sentence."""
+
+    def __init__(self):
+        self.items = []
+        self.done = False
+        self.cv = threading.Condition()
+
+
 class Speaker:
     """Synthesises sentence by sentence and streams PCM to AgentCall, which plays it in its window
     (same output device as the ringtone). Stopping just abandons the remaining sentences."""
@@ -84,6 +96,7 @@ class Speaker:
         self.model_lock = threading.Lock()
         self.current = None
         self.acks = {}
+        self.prepared = collections.OrderedDict()  # normalized text → Prepared (a few, newest last)
 
     def synth(self, text):
         with self.model_lock:  # an interrupted utterance may still be inside create(); never run two at once
@@ -118,6 +131,45 @@ class Speaker:
         if not data:
             raise RuntimeError("Edge TTS returned no audio")
         return bytes(data)
+
+    def prepare(self, text):
+        key = normalize(text)
+        if not key or key in self.prepared:
+            return
+        entry = Prepared()
+        self.prepared[key] = entry
+        while len(self.prepared) > 4:
+            self.prepared.popitem(last=False)
+        threading.Thread(target=self._fill, args=(key, entry), daemon=True).start()
+
+    def _fill(self, text, entry):
+        try:
+            parts = sentences(text)
+            produced = (self._edge_sentences(parts, threading.Event()) if self.edge_voice
+                        else ((s, ("pcm", self.synth(s))) for s in parts))
+            for s, audio in produced:
+                with entry.cv:
+                    entry.items.append((s, audio))
+                    entry.cv.notify_all()
+        except Exception as exc:
+            emit({"type": "warning", "message": f"prepare: {exc}"[:200]})
+        finally:
+            with entry.cv:
+                entry.done = True
+                entry.cv.notify_all()
+
+    def _play_prepared(self, utt_id, stopped, entry):
+        seq = 0
+        while not stopped.is_set():
+            with entry.cv:
+                while seq >= len(entry.items) and not entry.done and not stopped.is_set():
+                    entry.cv.wait(0.05)
+                if seq >= len(entry.items):
+                    break
+                s, audio = entry.items[seq]
+            self._send(utt_id, seq, audio, s)
+            seq += 1
+        return seq
 
     def stop(self):
         with self.lock:
@@ -185,9 +237,12 @@ class Speaker:
     def _produce(self, utt_id, stopped, text, audio):
         seq = 0
         try:
+            entry = self.prepared.get(normalize(text)) if text else None
             if audio is not None:
                 self._send(utt_id, seq, audio[1], audio[0])
                 seq += 1
+            elif entry is not None:
+                seq = self._play_prepared(utt_id, stopped, entry)
             elif self.edge_voice:
                 for s, rendered in self._edge_sentences(sentences(text), stopped):
                     if stopped.is_set():
@@ -245,6 +300,8 @@ def main():
             speaker.speak(msg.get("id", "ack"), audio=ack)
         elif cmd == "stop":
             speaker.stop()
+        elif cmd == "prepare" and msg.get("text"):
+            speaker.prepare(msg["text"])
     speaker.stop()
     return 0
 

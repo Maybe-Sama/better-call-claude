@@ -192,10 +192,12 @@ function renderActive(call) {
   // Enter with an empty box sends the spoken draft now. While Claude works, text is queued for it.
   const send = async () => {
     if (adopting) await adopting;
-    const value = input.value.trim();
+    const box = document.getElementById('textInput'); // a re-render may have replaced it meanwhile
+    if (!box) return;
+    const value = box.value.trim();
     const current = activeCall();
     if (!current || (!value && !voiceUi.draft)) return;
-    input.value = '';
+    box.value = '';
     window.agentCall.setTyping(false);
     stopSpeech();
     const result = await window.agentCall.submitText(current.id, value).catch(err => ({ ok: false, error: err.message }));
@@ -325,6 +327,8 @@ let ducked = false;
 function setDucked(on) {
   ducked = on;
   for (const el of [playback.current, ...(playback.queue || [])]) if (el) el.volume = on ? DUCK_VOLUME : 1;
+  // The Windows fallback voice cannot be turned down: it goes silent at once instead.
+  if (on && currentUtterance) stopSpeech();
 }
 
 function progress(event) { try { window.agentCall.ttsProgress(event); } catch {} }
@@ -681,3 +685,39 @@ minBtn.onclick = () => window.agentCall.minimize();
 closeBtn.onclick = () => window.agentCall.hide();
 window.addEventListener('beforeunload', () => { stopRing(); stopSpeech(); });
 window.agentCall.getState().then(initial => { state = initial; render(); });
+
+// ── Voice latency panel (Ctrl+Shift+L): live p50/p90 of the voice metrics, for tuning ──────────
+const METRIC_LABELS = {
+  'bargein.duck_ms': 'Tu voz → baja Claude',
+  'bargein.stop_ms': 'Tu voz → Claude calla',
+  'tts.stop_ms': 'Orden de parar → silencio',
+  'stt.first_partial_ms': 'Tu voz → primer texto',
+  'stt.final_ms': 'Fin de tu voz → texto final',
+  'turn.endpoint_ms': 'Fin de tu voz → envío',
+  'tts.first_audio_ms': 'Texto de Claude → su voz',
+};
+let metricsTimer = null;
+async function renderMetricsPanel(panel) {
+  const summary = await window.agentCall.voiceMetrics().catch(() => null);
+  if (!summary) return;
+  const rows = Object.entries(METRIC_LABELS).map(([key, label]) => {
+    const m = summary.metrics[key];
+    return `<tr><td>${esc(label)}</td><td>${m ? m.p50 : '—'}</td><td>${m ? m.p90 : '—'}</td><td>${m ? m.max : '—'}</td><td>${m ? m.count : 0}</td></tr>`;
+  }).join('');
+  const failures = Object.entries(summary.failures).filter(([, n]) => n).map(([k, n]) => `${esc(k)}: ${n}`).join(' · ') || 'ninguno';
+  panel.innerHTML = `<div class="metrics-head">Latencias de voz (ms) <span>Ctrl+Mayús+L para cerrar</span></div>
+    <table><thead><tr><th></th><th>p50</th><th>p90</th><th>máx</th><th>n</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="metrics-fail">Fallos: ${failures}</div>`;
+}
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'l')) return;
+  e.preventDefault();
+  let panel = document.getElementById('metricsPanel');
+  if (panel) { panel.remove(); clearInterval(metricsTimer); metricsTimer = null; return; }
+  panel = document.createElement('div');
+  panel.id = 'metricsPanel';
+  panel.className = 'metrics-panel';
+  document.body.appendChild(panel);
+  renderMetricsPanel(panel);
+  metricsTimer = setInterval(() => renderMetricsPanel(panel), 2000);
+});

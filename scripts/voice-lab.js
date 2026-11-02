@@ -14,7 +14,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const scenarios = require('./voice-lab/scenarios');
-const { LegacyEndpointer } = require('../src/voice/endpointing');
+const { LegacyEndpointer, AdaptiveEndpointer } = require('../src/voice/endpointing');
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA = path.join(process.env.LOCALAPPDATA || '.', 'AgentCall');
@@ -22,7 +22,14 @@ const LAB = path.join(DATA, 'voice-lab');
 const FIXTURES = path.join(LAB, 'fixtures');
 const PYTHON = path.join(DATA, 'whisper-venv', 'Scripts', 'python.exe');
 const GPU_PYTHON = path.join(DATA, 'gpu-venv', 'Scripts', 'python.exe');
-const POLICIES = { legacy: LegacyEndpointer };
+const POLICIES = { legacy: LegacyEndpointer, adaptive: AdaptiveEndpointer };
+
+// What Claude said before each scenario, as the app passes it to Whisper (sttContextFor in main.js).
+function contextFor(sc) {
+  if (sc.kind === 'permission') return { text: 'Claude pide permiso para usar Bash. Ejecutar npm test. ¿Lo permites?', hotwords: 'sí, no, adelante, vale, Bash' };
+  if (sc.kind === 'ask') return { text: `¿Qué base de datos prefieres? ${sc.options.join(', ')}.`, hotwords: sc.options.join(', ') };
+  return { text: 'He terminado el cambio de autenticación y las pruebas pasan. ¿Seguimos?', hotwords: '' };
+}
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -103,12 +110,16 @@ async function stt() {
   const Policy = POLICIES[policyName];
   if (!Policy) throw new Error(`unknown policy ${policyName}`);
   const python = backend === 'dml' ? GPU_PYTHON : PYTHON;
-  console.log(`stt: Whisper ${backend}, ${timeline.seconds} s de audio en tiempo real…`);
+  const endSilence = arg('end-silence', '0.7');
+  const contextFile = path.join(LAB, 'context.json');
+  fs.writeFileSync(contextFile, JSON.stringify(timeline.scenarios.map(sc => ({ at: Math.max(0, sc.parts[0].start - 2), ...contextFor(sc) }))));
+  console.log(`stt: Whisper ${backend}, fin de frase tras ${endSilence} s de silencio, ${timeline.seconds} s de audio en tiempo real…`);
 
   const events = [];
   let wavStart = null;
+  process.env.AGENTCALL_END_SILENCE = endSilence;
   const code = await runLines(python, ['-u', path.join(ROOT, 'src', 'speech', 'whisper_worker.py'), '--wav', wav, '--realtime',
-    '--backend', backend, '--language', 'es', '--models-dir', path.join(DATA, 'models')], ev => {
+    '--backend', backend, '--language', 'es', '--models-dir', path.join(DATA, 'models'), '--context-file', contextFile], ev => {
     if (ev.type === 'ready') console.log(`stt: ${ev.recognizer} cargado en ${ev.loadSeconds} s`);
     if (ev.type === 'wav-start') wavStart = ev.wt;
     if (wavStart == null || ev.type === 'level') return;
@@ -117,11 +128,11 @@ async function stt() {
   if (code !== 0 || wavStart == null) throw new Error(`whisper_worker exit ${code}`);
 
   const rows = timeline.scenarios.map((sc, i) => analyse(sc, timeline.scenarios[i + 1], events, Policy));
-  report(rows, { backend, policy: policyName, provider: timeline.provider });
+  report(rows, { backend, policy: policyName, provider: timeline.provider, endSilence });
   const out = path.join(LAB, 'results');
   fs.mkdirSync(out, { recursive: true });
-  const file = path.join(out, `stt-${backend}-${policyName}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-  fs.writeFileSync(file, JSON.stringify({ backend, policy: policyName, rows }, null, 1));
+  const file = path.join(out, `stt-${backend}-${policyName}-end${endSilence}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+  fs.writeFileSync(file, JSON.stringify({ backend, policy: policyName, endSilence, rows }, null, 1));
   console.log(`\nresultados: ${file}`);
 }
 
@@ -149,7 +160,7 @@ function analyse(sc, next, events, Policy) {
   const lost = sc.kind === 'working' && Policy === LegacyEndpointer; // legacy paused the mic while Claude worked
   const commits = [];
   if (!lost) {
-    const policy = new Policy({ kind: sc.kind === 'working' ? 'stop' : sc.kind, options: sc.options });
+    const policy = new Policy({ kind: sc.kind === 'working' ? 'stop' : sc.kind, options: sc.options || [] });
     const fire = (upTo) => {
       while (policy.deadline != null && policy.deadline <= upTo) {
         const at = policy.deadline;
@@ -159,7 +170,8 @@ function analyse(sc, next, events, Policy) {
     for (const e of own) {
       fire(e.t);
       if (e.type === 'speech' && e.state === 'start') policy.speechStart(e.t);
-      else if (e.type === 'speech' && e.state === 'end') policy.speechEnd(e.t);
+      else if (e.type === 'speech' && e.state === 'end') policy.speechEnd(e.t, { expectFinal: !e.cancelled && (e.voiced_ms == null || e.voiced_ms >= 350) });
+      else if (e.type === 'rejected') policy.final(e.t, '', 0);
       else if (e.type === 'partial') policy.partial(e.t, e.text);
       else if (e.type === 'final') policy.final(e.t, e.text, e.confidence);
     }
@@ -185,7 +197,7 @@ function analyse(sc, next, events, Policy) {
 }
 
 function report(rows, meta) {
-  console.log(`\nPolítica ${meta.policy} · Whisper ${meta.backend} · voz de prueba ${meta.provider}\n`);
+  console.log(`\nPolítica ${meta.policy} · Whisper ${meta.backend} · fin de frase ${meta.endSilence} s · voz de prueba ${meta.provider}\n`);
   console.log('escenario           tipo        detect  1er parcial  barge-in  final  confirmaciones  prematuras  fin→envío   WER');
   for (const r of rows) {
     console.log(`${r.id.padEnd(19)} ${r.kind.padEnd(11)} ${fmt(r.detectMs).padStart(6)} ${fmt(r.firstPartialMs).padStart(12)} ${fmt(r.bargeInMs).padStart(9)} ${fmt(r.finalLagMs).padStart(6)} ${String(r.commits).padStart(15)} ${String(r.premature).padStart(11)} ${(r.lost ? 'PERDIDO' : fmt(r.endpointMs)).padStart(10)} ${r.wer.toFixed(2).padStart(5)}`);

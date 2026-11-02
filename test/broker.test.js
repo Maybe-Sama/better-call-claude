@@ -541,3 +541,12 @@ test('speech for a session whose call is gone is still queued', () => {
   assert.equal(broker.queueSessionSpeech('gone', 'Y sube los cambios.').queued, true);
   assert.match(broker.noteToolDone(tool('gone')).hookSpecificOutput.additionalContext, /sube los cambios/);
 });
+
+test('the call rules ask for speech that sounds like a phone call, only when calls are on', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  assert.equal(broker.sessionStartContext({ session_id: 'style-off' }), null);
+  const rules = broker.notePrompt({ session_id: 'style-on', prompt: '/saul on' });
+  for (const cue of [/short sentences/, /important thing first/, /one question at a time/, /Never read paths, commands, code, URLs or markdown aloud/, /"Claro", "Perfecto"/, /answer it directly/]) {
+    assert.match(rules, cue);
+  }
+});

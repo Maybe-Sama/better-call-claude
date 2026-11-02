@@ -184,12 +184,19 @@ broker.on('change', (snapshot, detail) => {
   const active = activeCall(snapshot);
   voice.setCall(active);
   const ringing = snapshot.calls.some(c => c.status === 'ringing');
-  if (detail.event === 'ringing') showWindow({ onTop: true });
+  if (detail.event === 'ringing') { showWindow({ onTop: true }); prepareSpeech(snapshot.calls.find(c => c.id === detail.id)); }
   else if (detail.event === 'active') showWindow({ focus: true, onTop: true });
   else if (!active && !ringing && mainWindow?.isAlwaysOnTop()) mainWindow.setAlwaysOnTop(false);
 
   reconcileStt(active);
 });
+
+// While the phone rings, Claude's first words are synthesised, so they play the moment the user answers.
+function prepareSpeech(call) {
+  const latest = [...(call?.messages || [])].reverse().find(m => m.role === 'assistant');
+  const text = String(latest?.speech || latest?.text || '').replace(/\s+/g, ' ').trim();
+  if (text) tts.send({ cmd: 'prepare', text });
+}
 
 // ── Hook server ──────────────────────────────────────────────────────────────
 
@@ -709,6 +716,12 @@ function syncCapture(wanted) {
 }
 
 function onCaptureStatus(status = {}) {
+  // Echo cancellation was requested but the system did not grant it: without it, trusting the voice
+  // detector would let Claude's own voice cut Claude. Use the direct microphone instead.
+  if (status.ok && !status.echoCancellation && process.env.AGENTCALL_CAPTURE_AEC !== '0') {
+    status = { ok: false, error: 'el sistema no ofrece cancelación de eco para este micrófono' };
+    sendToRenderer('agentcall:capture', { on: false });
+  }
   if (status.ok) {
     log(`Micro: ${status.label || 'predeterminado'} · cancelación de eco ${status.echoCancellation ? 'activa' : 'NO disponible'} · ${status.sampleRate} Hz`);
     voice.setEchoCancelled(Boolean(status.echoCancellation));

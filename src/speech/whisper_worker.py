@@ -28,8 +28,12 @@ SAMPLE_RATE = 16000
 FRAME = 480                      # 30 ms
 PRE_ROLL_S = 0.6                 # keep the soft start of a phrase ("En-lace") that is below the threshold
 START_FRAMES = 3                 # 3 of the last 5 frames must be speech to open an utterance
-END_SILENCE_S = 0.7
+END_SILENCE_S = float(os.environ.get("AGENTCALL_END_SILENCE", "0.7"))  # silence that closes a phrase (→ final)
 PARTIAL_EVERY_S = 0.8
+# Speculative final: after this much silence the phrase is already transcribed with the final model.
+# If the silence lasts until END_SILENCE_S that result is the final (it saves the transcription time);
+# if the user goes on talking it is discarded.
+SPECULATE_S = float(os.environ.get("AGENTCALL_SPECULATE", "0.25"))
 MIN_UTTERANCE_S = 0.35
 MAX_UTTERANCE_S = 25.0
 # Close-talk gate: software gain applied to the microphone and the minimum level (RMS after gain) a
@@ -88,6 +92,7 @@ class Transcriber(threading.Thread):
         self.context = ""
         self.hotwords = None
         self.busy = False  # a transcription popped from the queue is running
+        self.spec = {}     # utt_id → {"gen", "result", "promoted"} for speculative finals
 
     def set_context(self, text, hotwords):
         """What Claude just said / asked: biases Whisper towards the words the user is likely to use."""
@@ -104,16 +109,52 @@ class Transcriber(threading.Thread):
             self.stale_upto = max(self.stale_upto, upto_utt_id)
             self.finals.clear()
             self.partial = None
+            self.spec.clear()
+
+    def speculate(self, utt_id, gen, audio):
+        with self.cv:
+            self.spec[utt_id] = {"gen": gen, "result": None, "promoted": False}
+        self.submit("spec", utt_id, audio, gen)
+
+    def discard_spec(self, utt_id):
+        with self.cv:
+            self.spec.pop(utt_id, None)
+
+    def promote(self, utt_id, gen):
+        """The phrase really ended: its speculative transcript becomes the final (now or when ready).
+        False if there is no valid speculation (then a normal final is needed)."""
+        with self.cv:
+            entry = self.spec.get(utt_id)
+            if not entry or entry["gen"] != gen:
+                return False
+            result = entry["result"]
+            if result is None:
+                entry["promoted"] = True
+        if result is not None:
+            self._emit_final(utt_id, *result, speculative=True)
+        return True
+
+    def _emit_final(self, utt_id, text, confidence, timing, speculative=False):
+        with self.cv:
+            if utt_id in self.done_utterances:
+                return
+            self.done_utterances.add(utt_id)
+            self.spec.pop(utt_id, None)
+        extra = {"speculative": True} if speculative else {}
+        if text:
+            emit({"type": "final", "text": text, "confidence": round(confidence, 3), "utterance": utt_id, **timing, **extra})
+        else:
+            emit({"type": "rejected", "utterance": utt_id, **timing, **extra})
 
     def _stale(self, utt_id):
         return utt_id <= self.stale_upto
 
-    def submit(self, kind, utt_id, audio):
+    def submit(self, kind, utt_id, audio, gen=None):
         with self.cv:
             if self._stale(utt_id):
                 return
-            if kind == "final":
-                self.finals.append((utt_id, audio))
+            if kind in ("final", "spec"):
+                self.finals.append((kind, utt_id, audio, gen))
                 self.partial = None
             else:
                 self.partial = (utt_id, audio)
@@ -125,13 +166,13 @@ class Transcriber(threading.Thread):
                 while not self.finals and self.partial is None:
                     self.cv.wait()
                 if self.finals:
-                    kind, (utt_id, audio) = "final", self.finals.pop(0)
+                    kind, utt_id, audio, gen = self.finals.pop(0)
                 else:
-                    kind, (utt_id, audio) = "partial", self.partial
+                    (utt_id, audio), kind, gen = self.partial, "partial", None
                     self.partial = None
                 self.busy = True
             try:
-                self._process(kind, utt_id, audio)
+                self._process(kind, utt_id, audio, gen)
             finally:
                 with self.cv:
                     self.busy = False
@@ -140,9 +181,14 @@ class Transcriber(threading.Thread):
         with self.cv:
             return not self.finals and self.partial is None and not self.busy
 
-    def _process(self, kind, utt_id, audio):
+    def _process(self, kind, utt_id, audio, gen=None):
         if self._stale(utt_id) or (kind == "partial" and utt_id in self.done_utterances):
             return
+        if kind == "spec":
+            with self.cv:
+                entry = self.spec.get(utt_id)
+            if not entry or entry["gen"] != gen:
+                return  # the user went on talking: this speculation is obsolete
         started = time.monotonic()
         try:
             text, confidence = self.transcribe(audio, final=(kind == "final"))
@@ -152,12 +198,17 @@ class Transcriber(threading.Thread):
         if self._stale(utt_id):
             return
         timing = {"stt_ms": int((time.monotonic() - started) * 1000), "audio_ms": int(len(audio) * 1000 / SAMPLE_RATE)}
-        if kind == "final":
-            self.done_utterances.add(utt_id)
-            if text:
-                emit({"type": "final", "text": text, "confidence": round(confidence, 3), "utterance": utt_id, **timing})
-            else:
-                emit({"type": "rejected", "utterance": utt_id, **timing})
+        if kind == "spec":
+            with self.cv:
+                entry = self.spec.get(utt_id)
+                if not entry or entry["gen"] != gen:
+                    return
+                entry["result"] = (text, confidence, timing)
+                promoted = entry["promoted"]
+            if promoted:
+                self._emit_final(utt_id, text, confidence, timing, speculative=True)
+        elif kind == "final":
+            self._emit_final(utt_id, text, confidence, timing)
         elif text and utt_id not in self.done_utterances:
             emit({"type": "partial", "text": text, "utterance": utt_id, **timing})
 
@@ -205,6 +256,9 @@ class Segmenter:
         self.since_partial = 0
         self.last_level = 0.0
         self.frames_fed = 0  # audio clock: position of the current frame in the stream
+        self.spec_gen = 0    # speculative final of the current phrase (see SPECULATE_S)
+        self.spec_live = False
+        self.context_schedule = []  # voice lab: [(audio_t, text, hotwords)] applied as the WAV plays
 
     def cancel(self):
         """Pause: abandon the current utterance (telling the app speech ended) and all pending work."""
@@ -215,6 +269,7 @@ class Segmenter:
 
     def reset(self):
         self.utterance = None
+        self.spec_live = False
         self.history = []
         self.pre_roll = []
         self.silent_frames = 0
@@ -238,6 +293,9 @@ class Segmenter:
                 self.noise = 0.97 * self.noise + 0.03 * rms
             self.history = (self.history + [speech])[-5:]
             self.pre_roll = (self.pre_roll + [frame])[-int(PRE_ROLL_S * SAMPLE_RATE / FRAME):]
+            if self.context_schedule and self.audio_t() >= self.context_schedule[0][0]:
+                _at, text, hotwords = self.context_schedule.pop(0)
+                self.t.set_context(text, hotwords)
             if sum(self.history) >= START_FRAMES:
                 self.utt_id += 1
                 # onset_ms: how long ago (audio time) the first speech frame of the window was heard.
@@ -252,11 +310,20 @@ class Segmenter:
         self.utterance.append(frame)
         if speech:
             self.levels.append(rms)
+            if self.spec_live:  # the pause was only a pause
+                self.t.discard_spec(self.utt_id)
+                self.spec_live = False
         self.silent_frames = 0 if speech else self.silent_frames + 1
         self.since_partial += 1
         length_s = len(self.utterance) * FRAME / SAMPLE_RATE
-        if self.silent_frames * FRAME / SAMPLE_RATE >= END_SILENCE_S or length_s >= MAX_UTTERANCE_S:
+        silence_s = self.silent_frames * FRAME / SAMPLE_RATE
+        if silence_s >= END_SILENCE_S or length_s >= MAX_UTTERANCE_S:
             self.finish()
+        elif (not speech and not self.spec_live and SPECULATE_S < END_SILENCE_S and silence_s >= SPECULATE_S
+              and length_s - silence_s >= MIN_UTTERANCE_S):
+            self.spec_gen += 1
+            self.spec_live = True
+            self.t.speculate(self.utt_id, self.spec_gen, np.concatenate(self.utterance))
         elif self.since_partial * FRAME / SAMPLE_RATE >= PARTIAL_EVERY_S and length_s >= 0.6:
             self.since_partial = 0
             self.t.submit("partial", self.utt_id, np.concatenate(self.utterance))
@@ -271,7 +338,11 @@ class Segmenter:
               "rms": round(sum(levels) / len(levels), 4), "threshold": round(getattr(self, "last_threshold", 0.0), 4),
               "silence_ms": self.silent_frames * FRAME * 1000 // SAMPLE_RATE, "voiced_ms": int(voiced_s * 1000), "audio_t": self.audio_t()})
         if voiced_s >= MIN_UTTERANCE_S:
-            self.t.submit("final", self.utt_id, audio)
+            if not (self.spec_live and self.t.promote(self.utt_id, self.spec_gen)):
+                self.t.submit("final", self.utt_id, audio)
+        elif self.spec_live:
+            self.t.discard_spec(self.utt_id)
+        self.spec_live = False
         self.reset()
 
 
@@ -426,6 +497,7 @@ def main():
     parser.add_argument("--dml-model-dir", default=os.path.join(os.environ.get("LOCALAPPDATA", "."), "AgentCall", "models", "whisper-turbo-onnx"))
     parser.add_argument("--wav", default="")
     parser.add_argument("--realtime", action="store_true", help="testing: feed --wav at real-time speed")
+    parser.add_argument("--context-file", default="", help="testing: JSON [{at, text, hotwords}] applied while the WAV plays")
     parser.add_argument("--mic", default=os.environ.get("AGENTCALL_MIC", ""))
     parser.add_argument("--source", default="device", choices=["device", "stdin"])
     parser.add_argument("--context", default="", help="testing: context text")
@@ -451,6 +523,9 @@ def main():
     segmenter = Segmenter(transcriber)
     if args.context or args.hotwords:
         transcriber.set_context(args.context, args.hotwords)
+    if args.context_file:
+        with open(args.context_file, encoding="utf-8") as f:
+            segmenter.context_schedule = sorted((c["at"], c.get("text", ""), c.get("hotwords", "")) for c in json.load(f))
     label = "large-v3-turbo (local, GPU DirectML)" if args.backend == "dml" else f"{args.model} (local, CPU)"
     emit({"type": "ready", "engine": "whisper", "recognizer": f"Whisper {label}",
           "loadSeconds": round(time.monotonic() - started, 1)})

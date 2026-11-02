@@ -340,3 +340,63 @@ test('without aec, the voice detector alone never stops Claude (it may be its ow
   h.advance(1000);
   assert.equal(h.events('tts').length, 0);
 });
+
+test('an answer that repeats Claude\'s words after Claude went quiet is the user, not echo', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ messages: [assistant('¿Prefieres Supabase o Neon?')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: '¿Prefieres Supabase o Neon?' });
+  h.advance(2000);
+  h.conv.tts({ type: 'end', id });
+  h.advance(400);
+  h.say('Neon.');
+  h.advance(3000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Neon.']);
+});
+
+test('without echo cancellation, Claude\'s own words heard while it speaks are still echo', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ messages: [assistant('¿Prefieres Supabase o Neon?')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: '¿Prefieres Supabase o Neon?' });
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 }); // the speakers, during playback
+  h.advance(900);
+  h.conv.tts({ type: 'end', id });
+  h.advance(700);
+  h.conv.stt({ type: 'speech', state: 'end', silence_ms: 700 });
+  h.advance(500);
+  h.conv.stt({ type: 'final', text: 'Supabase o Neon', confidence: 0.8 });
+  h.advance(4000);
+  assert.equal(h.events('commit').length, 0);
+});
+
+test('with echo cancellation nothing is discarded as echo', () => {
+  const h = harness();
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall({ messages: [assistant('¿Prefieres Supabase o Neon?')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: '¿Prefieres Supabase o Neon?' });
+  h.say('Supabase o Neon, no sé.');
+  h.advance(4000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Supabase o Neon, no sé.']);
+});
+
+test('a stale result marked silent is shown but not read aloud', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [assistant('He terminado.'), { role: 'assistant', text: 'Ya está.', speech: '', silent: true, at: 9 }] }));
+  assert.deepEqual(h.events('speak').map(s => s.text), []);
+});
+
+test('a phrase transcribed while typing goes to the box and does not leave the turn waiting', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.setTyping(true);
+  const appended = [];
+  h.conv.on('append', a => appended.push(a.text));
+  h.say('y el plan gratuito');
+  h.conv.setTyping(false);
+  h.say('Haz el cambio.');
+  h.advance(1500);
+  assert.deepEqual(appended, ['y el plan gratuito']);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Haz el cambio.']);
+});
