@@ -118,9 +118,31 @@ test('adaptive: a phrase too short to transcribe (or rejected) does not block th
   p.final(1600, 'Haz el cambio.');
   p.speechStart(1700);
   p.speechEnd(2100, { expectFinal: false }); // 0.2 s of voice: the worker sends no transcript
-  assert.ok(p.deadline - 2100 <= 600);
+  assert.ok(p.deadline - 2100 <= 1000, 'decided on what it has, without waiting for a transcript');
   p.speechStart(2300);
   p.speechEnd(3000);
   p.final(3500, '', 0); // rejected: no words
-  assert.ok(p.deadline - 3500 <= 600);
+  assert.ok(p.deadline - 3500 <= 1000);
+});
+
+test('adaptive: "un momento" / "espera" at the end mean the user is still thinking', () => {
+  for (const text of ['Vale pues prueba Google y. Un momento.', 'Espera.', 'A ver.', 'Déjame pensar.']) {
+    const wait = turn(new AdaptiveEndpointer({ kind: 'stop' }), text);
+    assert.ok(wait >= 2500, `${text}: ${wait}`);
+  }
+});
+
+test('adaptive: floors count from when the voice really stopped, not from when the transcript came', () => {
+  // The worker reports the end after 500 ms of silence; a speculative transcript arrives 300 ms later.
+  const free = new AdaptiveEndpointer({ kind: 'stop' });
+  free.speechStart(0);
+  free.speechEnd(1500, { silenceMs: 500 }); // voice stopped at 1000
+  free.final(1800, 'Cambia el endpoint de Supabase.');
+  assert.ok(free.deadline - 1000 >= 1000, `free reply: ${free.deadline - 1000}`);
+  const yes = new AdaptiveEndpointer({ kind: 'permission' });
+  yes.speechStart(0);
+  yes.speechEnd(1500, { silenceMs: 500 });
+  yes.final(1800, 'Sí.');
+  assert.ok(yes.deadline - 1000 <= 950, `short answer: ${yes.deadline - 1000}`);
+  assert.ok(yes.deadline < free.deadline, 'a short answer goes before a free reply');
 });

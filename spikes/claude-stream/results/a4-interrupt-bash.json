@@ -1,0 +1,505 @@
+{
+  "name": "a4-interrupt-bash",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:14:36.950Z",
+  "summary": {
+    "bash": {
+      "reps": 10,
+      "toControlResponse": {
+        "n": 10,
+        "median": 8.3,
+        "min": 7.6,
+        "max": 38.1
+      },
+      "toResult": {
+        "n": 10,
+        "median": 19.2,
+        "min": 16.6,
+        "max": 55.9
+      },
+      "toLastStreamEvent": {
+        "n": 0,
+        "median": null,
+        "min": null,
+        "max": null
+      },
+      "resultKinds": {
+        "error_during_execution/aborted_tools": 10
+      },
+      "usableAfter": 10,
+      "markersWritten": "0/10",
+      "sleepAliveAfter": 10,
+      "awareness": "INTERRUPTED"
+    }
+  },
+  "bash": {
+    "runs": [
+      {
+        "toControlResponse": 8.8,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_ry16l4",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 33.5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "9 control_response:success",
+          "10 system:task_notification",
+          "19 user:tool_result",
+          "20 user:text",
+          "33 result:error_during_execution"
+        ],
+        "resIdx": 51,
+        "rep": 0,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 7.6,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_2_d56lis",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 18.3,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "9 system:task_notification",
+          "14 user:tool_result",
+          "15 user:text",
+          "18 result:error_during_execution"
+        ],
+        "resIdx": 86,
+        "rep": 1,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 8.2,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_3_ic3333",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 18.5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "10 system:task_notification",
+          "15 user:tool_result",
+          "16 user:text",
+          "19 result:error_during_execution"
+        ],
+        "resIdx": 116,
+        "rep": 2,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 38.1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_4_2ffvkq",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 55.9,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "38 control_response:success",
+          "41 system:task_notification",
+          "51 user:tool_result",
+          "52 user:text",
+          "56 result:error_during_execution"
+        ],
+        "resIdx": 146,
+        "rep": 3,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 8,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_5_4ak6fp",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 16.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "9 system:task_notification",
+          "14 user:tool_result",
+          "15 user:text",
+          "17 result:error_during_execution"
+        ],
+        "resIdx": 175,
+        "rep": 4,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 9.4,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_6_lsbn6m",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 19.8,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "9 control_response:success",
+          "11 system:task_notification",
+          "16 user:tool_result",
+          "17 user:text",
+          "20 result:error_during_execution"
+        ],
+        "resIdx": 204,
+        "rep": 5,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 7.9,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_7_0xeoj9",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 16.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "9 system:task_notification",
+          "14 user:tool_result",
+          "15 user:text",
+          "17 result:error_during_execution"
+        ],
+        "resIdx": 233,
+        "rep": 6,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 7.6,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_8_hdkw0c",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 18.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "9 system:task_notification",
+          "15 user:tool_result",
+          "16 user:text",
+          "19 result:error_during_execution"
+        ],
+        "resIdx": 262,
+        "rep": 7,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 8.4,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_9_hibjk4",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 20.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "10 system:task_notification",
+          "18 user:tool_result",
+          "19 user:text",
+          "21 result:error_during_execution"
+        ],
+        "resIdx": 291,
+        "rep": 8,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      },
+      {
+        "toControlResponse": 19.5,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_10_agu9hy",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 34.4,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_tools",
+          "stop_reason": "tool_use",
+          "num_turns": 3,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "19 control_response:success",
+          "21 system:task_notification",
+          "29 user:tool_result",
+          "30 user:text",
+          "34 result:error_during_execution"
+        ],
+        "resIdx": 320,
+        "rep": 9,
+        "toolUseSeen": true,
+        "taskStartedSeen": true,
+        "sleepProcsBefore": [
+          "sleep.exe",
+          "bash.exe",
+          "bash.exe",
+          "sleep.exe"
+        ],
+        "sleepProcsAfter": [
+          "sleep.exe",
+          "sleep.exe"
+        ],
+        "toolResult": {
+          "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_stri",
+          "is_error": true
+        }
+      }
+    ],
+    "awareness": {
+      "text": "INTERRUPTED",
+      "subtype": "success",
+      "terminal_reason": "completed",
+      "toResult": 2162.9
+    },
+    "markersWritten": [],
+    "markers": 10
+  }
+}

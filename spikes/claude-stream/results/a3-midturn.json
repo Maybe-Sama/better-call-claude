@@ -1,0 +1,2014 @@
+{
+  "name": "a3-midturn",
+  "claudeVersion": null,
+  "at": "2026-11-02T17:59:17.121Z",
+  "byCase": {
+    "bash-default": {
+      "injected-into-current-turn": 3
+    },
+    "bash-now": {
+      "queued-as-next-turn": 3
+    },
+    "bash-next": {
+      "injected-into-current-turn": 3
+    },
+    "text-default": {
+      "queued-as-next-turn": 3
+    },
+    "text-now": {
+      "queued-as-next-turn": 3
+    }
+  },
+  "runs": [
+    {
+      "kind": "bash",
+      "priority": "default",
+      "word": "ZEBRA",
+      "verdict": "injected-into-current-turn",
+      "triggerAt": 4077.9,
+      "injectAfterTrigger": 1501.3,
+      "result1": {
+        "t": 10016.9,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "result2": null,
+      "toolResultAt": 7819.9,
+      "lifecycle": [
+        {
+          "t": -4358.9,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -4356.3,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 1.4,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 7979.4,
+          "who": "injected",
+          "state": "started"
+        },
+        {
+          "t": 10014.1,
+          "who": "injected",
+          "state": "completed"
+        },
+        {
+          "t": 10019.2,
+          "who": "original",
+          "state": "completed"
+        }
+      ],
+      "replays": [
+        {
+          "t": -3563.4,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 7977.3,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 7819.9,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "El comando se completó exitosamente después de 8 segundos, como un ZEBRA esperando pacientemente en la sabana.",
+      "textAfterR1": "",
+      "sequence": [
+        "-4432 system:hook_started",
+        "-4431 system:hook_started",
+        "-4431 system:hook_started",
+        "-4431 system:hook_response",
+        "-4431 system:hook_response",
+        "-4395 system:hook_response",
+        "-4359 command_lifecycle",
+        "-4356 command_lifecycle",
+        "-4154 system:init",
+        "-4150 system:status",
+        "-3563 user:string:replay",
+        "-3563 se:message_start",
+        "-3563 se:content_block_start:thinking",
+        "-3292 system:thinking_tokens",
+        "-3291 se:content_block_delta:thinking_delta",
+        "-2218 system:thinking_tokens",
+        "-2218 se:content_block_delta:thinking_delta x2",
+        "-1760 system:thinking_tokens",
+        "-1760 se:content_block_delta:signature_delta",
+        "-1755 assistant:thinking",
+        "-1754 se:content_block_stop",
+        "-1754 se:content_block_start:tool_use",
+        "-1754 se:content_block_delta:input_json_delta x7",
+        "-1501 assistant:tool_use",
+        "-1496 se:content_block_stop",
+        "-1469 se:message_delta",
+        "-1468 se:message_stop",
+        "-1467 rate_limit_event",
+        "1 command_lifecycle",
+        "2621 system:task_started",
+        "7726 system:task_notification",
+        "7820 user:tool_result",
+        "7977 user:string:replay",
+        "7979 command_lifecycle",
+        "7980 system:status",
+        "8587 se:message_start",
+        "8587 se:content_block_start:thinking",
+        "9313 system:thinking_tokens",
+        "9314 se:content_block_delta:thinking_delta x2",
+        "9440 system:thinking_tokens",
+        "9440 se:content_block_delta:signature_delta",
+        "9441 assistant:thinking",
+        "9442 se:content_block_stop",
+        "9442 se:content_block_start:text",
+        "9442 se:content_block_delta:text_delta x14",
+        "9770 assistant:text",
+        "9770 se:content_block_stop",
+        "9781 se:message_delta",
+        "9781 se:message_stop",
+        "10014 command_lifecycle",
+        "10017 result:success",
+        "10019 command_lifecycle"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "default",
+      "word": "OTTER",
+      "verdict": "injected-into-current-turn",
+      "triggerAt": 1311.8,
+      "injectAfterTrigger": 1506.3,
+      "result1": {
+        "t": 8165.7,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 1
+      },
+      "result2": null,
+      "toolResultAt": 6698.4,
+      "lifecycle": [
+        {
+          "t": -2817.1,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -2813.6,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 1.1,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 6836.6,
+          "who": "injected",
+          "state": "started"
+        },
+        {
+          "t": 8163.7,
+          "who": "injected",
+          "state": "completed"
+        },
+        {
+          "t": 8166.5,
+          "who": "original",
+          "state": "completed"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2038.8,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 6835.9,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 6698.4,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "El comando terminó exitosamente, como un OTTER nadando a través del tiempo.",
+      "textAfterR1": "",
+      "sequence": [
+        "-2817 command_lifecycle",
+        "-2814 command_lifecycle",
+        "-2678 system:init",
+        "-2677 system:status",
+        "-2039 user:string:replay",
+        "-2039 se:message_start",
+        "-2039 se:content_block_start:thinking",
+        "-1705 se:content_block_delta:thinking_delta",
+        "-1705 se:content_block_delta:signature_delta",
+        "-1704 assistant:thinking",
+        "-1704 se:content_block_stop",
+        "-1704 se:content_block_start:tool_use",
+        "-1704 se:content_block_delta:input_json_delta x5",
+        "-1506 assistant:tool_use",
+        "-1505 se:content_block_stop",
+        "-1480 se:message_delta",
+        "-1480 se:message_stop",
+        "1 command_lifecycle",
+        "1527 system:task_started",
+        "6620 system:task_notification",
+        "6698 user:tool_result",
+        "6836 user:string:replay",
+        "6837 command_lifecycle",
+        "6837 system:status",
+        "7350 se:message_start",
+        "7350 se:content_block_start:thinking",
+        "7642 system:thinking_tokens",
+        "7642 se:content_block_delta:thinking_delta x2",
+        "7746 system:thinking_tokens",
+        "7746 se:content_block_delta:signature_delta",
+        "7746 assistant:thinking",
+        "7747 se:content_block_stop",
+        "7747 se:content_block_start:text",
+        "7747 se:content_block_delta:text_delta x8",
+        "7913 assistant:text",
+        "7913 se:content_block_stop",
+        "7923 se:message_delta",
+        "7924 se:message_stop",
+        "8164 command_lifecycle",
+        "8166 result:success",
+        "8166 command_lifecycle"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "default",
+      "word": "MAPLE",
+      "verdict": "injected-into-current-turn",
+      "triggerAt": 1154.3,
+      "injectAfterTrigger": 1511.6,
+      "result1": {
+        "t": 8051.9,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 2
+      },
+      "result2": null,
+      "toolResultAt": 6689.8,
+      "lifecycle": [
+        {
+          "t": -2663.8,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -2659.1,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 1,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 6814.6,
+          "who": "injected",
+          "state": "started"
+        },
+        {
+          "t": 8049.6,
+          "who": "injected",
+          "state": "completed"
+        },
+        {
+          "t": 8052.5,
+          "who": "original",
+          "state": "completed"
+        }
+      ],
+      "replays": [
+        {
+          "t": -1895.6,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 6813.9,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 6689.8,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "El comando finalizó correctamente, tan rápido como caen las hojas de MAPLE en otoño.",
+      "textAfterR1": "",
+      "sequence": [
+        "-2664 command_lifecycle",
+        "-2659 command_lifecycle",
+        "-2470 system:init",
+        "-2469 system:status",
+        "-1896 user:string:replay",
+        "-1895 se:message_start",
+        "-1895 se:content_block_start:thinking",
+        "-1678 se:content_block_delta:thinking_delta",
+        "-1678 se:content_block_delta:signature_delta",
+        "-1677 assistant:thinking",
+        "-1677 se:content_block_stop",
+        "-1676 se:content_block_start:tool_use",
+        "-1676 se:content_block_delta:input_json_delta x4",
+        "-1512 assistant:tool_use",
+        "-1510 se:content_block_stop",
+        "-1501 se:message_delta",
+        "-1501 se:message_stop",
+        "1 command_lifecycle",
+        "1512 system:task_started",
+        "6612 system:task_notification",
+        "6690 user:tool_result",
+        "6814 user:string:replay",
+        "6815 command_lifecycle",
+        "6815 system:status",
+        "7410 se:message_start",
+        "7411 se:content_block_start:thinking",
+        "7608 system:thinking_tokens",
+        "7608 se:content_block_delta:thinking_delta x2",
+        "7608 system:thinking_tokens",
+        "7608 se:content_block_delta:signature_delta",
+        "7609 assistant:thinking",
+        "7609 se:content_block_stop",
+        "7609 se:content_block_start:text",
+        "7609 se:content_block_delta:text_delta x10",
+        "7817 assistant:text",
+        "7817 se:content_block_stop",
+        "7827 se:message_delta",
+        "7827 se:message_stop",
+        "8050 command_lifecycle",
+        "8052 result:success",
+        "8053 command_lifecycle"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "now",
+      "word": "ZEBRA",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 4143.6,
+      "injectAfterTrigger": 1502.6,
+      "result1": {
+        "t": 1249.7,
+        "subtype": "success",
+        "terminal_reason": "aborted_tools",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "result2": {
+        "t": 13251.8,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 1
+      },
+      "toolResultAt": 1233.9,
+      "lifecycle": [
+        {
+          "t": -3436.6,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -3432.3,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 3.4,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 1253,
+          "who": "original",
+          "state": "cancelled"
+        },
+        {
+          "t": 1254.5,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2234.5,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 2201.7,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 1233.9,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "",
+      "textAfterR1": "The sleep command finished, as reliably as a ZEBRA crossing a plain.",
+      "sequence": [
+        "-3768 system:hook_started",
+        "-3768 system:hook_started",
+        "-3768 system:hook_started",
+        "-3768 system:hook_response",
+        "-3663 system:hook_response",
+        "-3505 system:hook_response",
+        "-3437 command_lifecycle",
+        "-3432 command_lifecycle",
+        "-3082 system:init",
+        "-3075 system:status",
+        "-2234 user:string:replay",
+        "-2234 se:message_start",
+        "-2234 se:content_block_start:thinking",
+        "-1803 se:content_block_delta:thinking_delta",
+        "-1803 se:content_block_delta:signature_delta",
+        "-1797 assistant:thinking",
+        "-1796 se:content_block_stop",
+        "-1796 se:content_block_start:tool_use",
+        "-1796 se:content_block_delta:input_json_delta x6",
+        "-1503 assistant:tool_use",
+        "-1497 se:content_block_stop",
+        "-1445 se:message_delta",
+        "-1444 se:message_stop",
+        "-1441 rate_limit_event",
+        "3 command_lifecycle",
+        "1234 user:tool_result",
+        "1250 result:success",
+        "1253 command_lifecycle",
+        "1254 command_lifecycle",
+        "1431 system:init",
+        "1433 system:status",
+        "2202 user:string:replay",
+        "2202 se:message_start",
+        "2202 se:content_block_start:thinking",
+        "2765 system:thinking_tokens",
+        "2765 se:content_block_delta:thinking_delta x2",
+        "3126 system:thinking_tokens",
+        "3126 se:content_block_delta:signature_delta",
+        "3127 assistant:thinking",
+        "3127 se:content_block_stop",
+        "3127 se:content_block_start:tool_use",
+        "3127 se:content_block_delta:input_json_delta x8",
+        "3474 assistant:tool_use",
+        "3476 se:content_block_stop",
+        "3486 se:message_delta",
+        "3486 se:message_stop",
+        "6504 system:task_started",
+        "11605 system:task_notification",
+        "11694 user:tool_result",
+        "11701 system:status",
+        "12420 se:message_start",
+        "12420 se:content_block_start:thinking",
+        "12762 se:content_block_delta:thinking_delta",
+        "12762 se:content_block_delta:signature_delta",
+        "12763 assistant:thinking",
+        "12763 se:content_block_stop",
+        "12763 se:content_block_start:text",
+        "12764 se:content_block_delta:text_delta x10",
+        "13010 assistant:text",
+        "13010 se:content_block_stop",
+        "13011 se:message_delta",
+        "13011 se:message_stop",
+        "13252 result:success"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "now",
+      "word": "OTTER",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 1600.5,
+      "injectAfterTrigger": 1502.6,
+      "result1": {
+        "t": 6612.1,
+        "subtype": "success",
+        "terminal_reason": "aborted_tools",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 2
+      },
+      "result2": {
+        "t": 8219.5,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 3
+      },
+      "toolResultAt": 6609.7,
+      "lifecycle": [
+        {
+          "t": -3101.7,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -3100.8,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 3.8,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 6613.3,
+          "who": "original",
+          "state": "cancelled"
+        },
+        {
+          "t": 6614.5,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2252.4,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 7483.1,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 6609.7,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "",
+      "textAfterR1": "The sleep command finished, smooth as an OTTER gliding through water.",
+      "sequence": [
+        "-3102 command_lifecycle",
+        "-3101 command_lifecycle",
+        "-2969 system:init",
+        "-2968 system:status",
+        "-2252 user:string:replay",
+        "-2252 se:message_start",
+        "-2252 se:content_block_start:thinking",
+        "-1863 system:thinking_tokens",
+        "-1862 se:content_block_delta:thinking_delta x2",
+        "-1733 system:thinking_tokens",
+        "-1733 se:content_block_delta:signature_delta",
+        "-1732 assistant:thinking",
+        "-1732 se:content_block_stop",
+        "-1732 se:content_block_start:tool_use",
+        "-1732 se:content_block_delta:input_json_delta x6",
+        "-1503 assistant:tool_use",
+        "-1501 se:content_block_stop",
+        "-1492 se:message_delta",
+        "-1492 se:message_stop",
+        "4 command_lifecycle",
+        "1521 system:task_started",
+        "6604 system:task_notification",
+        "6610 user:tool_result",
+        "6612 result:success",
+        "6613 command_lifecycle",
+        "6615 command_lifecycle",
+        "6749 system:init",
+        "6750 system:status",
+        "7483 user:string:replay",
+        "7483 se:message_start",
+        "7483 se:content_block_start:thinking",
+        "7790 system:thinking_tokens",
+        "7790 se:content_block_delta:thinking_delta x2",
+        "7841 system:thinking_tokens",
+        "7841 se:content_block_delta:signature_delta",
+        "7841 assistant:thinking",
+        "7841 se:content_block_stop",
+        "7842 se:content_block_start:text",
+        "7842 se:content_block_delta:text_delta x7",
+        "7981 assistant:text",
+        "7981 se:content_block_stop",
+        "7991 se:message_delta",
+        "7991 se:message_stop",
+        "8220 result:success"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "now",
+      "word": "MAPLE",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 1770.7,
+      "injectAfterTrigger": 1504.8,
+      "result1": {
+        "t": 6684.8,
+        "subtype": "success",
+        "terminal_reason": "aborted_tools",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 4
+      },
+      "result2": {
+        "t": 8432.2,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 5
+      },
+      "toolResultAt": 6682.2,
+      "lifecycle": [
+        {
+          "t": -3274.4,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -3273.5,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 2.5,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 6686.6,
+          "who": "original",
+          "state": "cancelled"
+        },
+        {
+          "t": 6688.3,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2022.1,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 7655.4,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 6682.2,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "",
+      "textAfterR1": "The sleep command finished, as dependable as a MAPLE tree in autumn.",
+      "sequence": [
+        "-3274 command_lifecycle",
+        "-3273 command_lifecycle",
+        "-3147 system:init",
+        "-3146 system:status",
+        "-2022 user:string:replay",
+        "-2022 se:message_start",
+        "-2022 se:content_block_start:thinking",
+        "-1724 se:content_block_delta:thinking_delta",
+        "-1724 se:content_block_delta:signature_delta",
+        "-1723 assistant:thinking",
+        "-1723 se:content_block_stop",
+        "-1723 se:content_block_start:tool_use",
+        "-1723 se:content_block_delta:input_json_delta x5",
+        "-1505 assistant:tool_use",
+        "-1503 se:content_block_stop",
+        "-1491 se:message_delta",
+        "-1491 se:message_stop",
+        "2 command_lifecycle",
+        "1548 system:task_started",
+        "6676 system:task_notification",
+        "6682 user:tool_result",
+        "6685 result:success",
+        "6687 command_lifecycle",
+        "6688 command_lifecycle",
+        "6911 system:init",
+        "6913 system:status",
+        "7655 user:string:replay",
+        "7656 se:message_start",
+        "7656 se:content_block_start:thinking",
+        "7871 system:thinking_tokens",
+        "7871 se:content_block_delta:thinking_delta x2",
+        "7883 system:thinking_tokens",
+        "7883 se:content_block_delta:signature_delta",
+        "7885 assistant:thinking",
+        "7885 se:content_block_stop",
+        "7885 se:content_block_start:text",
+        "7885 se:content_block_delta:text_delta x7",
+        "8021 assistant:text",
+        "8021 se:content_block_stop",
+        "8038 se:message_delta",
+        "8039 se:message_stop",
+        "8432 result:success"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "next",
+      "word": "ZEBRA",
+      "verdict": "injected-into-current-turn",
+      "triggerAt": 7536.6,
+      "injectAfterTrigger": 1502.9,
+      "result1": {
+        "t": 11884,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "result2": null,
+      "toolResultAt": 7768,
+      "lifecycle": [
+        {
+          "t": -7010.9,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -7007.7,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 1.1,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 8035.2,
+          "who": "injected",
+          "state": "started"
+        },
+        {
+          "t": 11881.4,
+          "who": "injected",
+          "state": "completed"
+        },
+        {
+          "t": 11885.2,
+          "who": "original",
+          "state": "completed"
+        }
+      ],
+      "replays": [
+        {
+          "t": -5780.4,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 8030.7,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 7768,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "El comando `sleep 8` ha terminado correctamente, como una ZEBRA en movimiento.",
+      "textAfterR1": "",
+      "sequence": [
+        "-7315 system:hook_started",
+        "-7315 system:hook_started",
+        "-7315 system:hook_started",
+        "-7315 system:hook_response",
+        "-7175 system:hook_response",
+        "-7082 system:hook_response",
+        "-7011 command_lifecycle",
+        "-7008 command_lifecycle",
+        "-6593 system:init",
+        "-6585 system:status",
+        "-5780 user:string:replay",
+        "-5780 se:message_start",
+        "-5780 se:content_block_start:thinking",
+        "-5440 system:thinking_tokens",
+        "-5439 se:content_block_delta:thinking_delta",
+        "-4103 system:thinking_tokens",
+        "-4102 se:content_block_delta:thinking_delta",
+        "-2578 system:thinking_tokens",
+        "-2578 se:content_block_delta:thinking_delta x2",
+        "-1777 system:thinking_tokens",
+        "-1776 se:content_block_delta:signature_delta",
+        "-1766 assistant:thinking",
+        "-1766 se:content_block_stop",
+        "-1765 se:content_block_start:tool_use",
+        "-1764 se:content_block_delta:input_json_delta x5",
+        "-1503 assistant:tool_use",
+        "-1500 se:content_block_stop",
+        "-1478 se:message_delta",
+        "-1478 se:message_stop",
+        "-1477 rate_limit_event",
+        "1 command_lifecycle",
+        "2520 system:task_started",
+        "7630 system:task_notification",
+        "7768 user:tool_result",
+        "8031 user:string:replay",
+        "8035 command_lifecycle",
+        "8037 system:status",
+        "9466 se:message_start",
+        "9466 se:content_block_start:thinking",
+        "10321 system:thinking_tokens",
+        "10321 se:content_block_delta:thinking_delta x2",
+        "11457 system:thinking_tokens",
+        "11457 se:content_block_delta:signature_delta",
+        "11458 assistant:thinking",
+        "11458 se:content_block_stop",
+        "11458 se:content_block_start:text",
+        "11459 se:content_block_delta:text_delta x9",
+        "11643 assistant:text",
+        "11644 se:content_block_stop",
+        "11655 se:message_delta",
+        "11655 se:message_stop",
+        "11881 command_lifecycle",
+        "11884 result:success",
+        "11885 command_lifecycle"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "next",
+      "word": "OTTER",
+      "verdict": "injected-into-current-turn",
+      "triggerAt": 2594.5,
+      "injectAfterTrigger": 1503.6,
+      "result1": {
+        "t": 9077.4,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 1
+      },
+      "result2": null,
+      "toolResultAt": 6780.6,
+      "lifecycle": [
+        {
+          "t": -4096.7,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -4092.5,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 2.4,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 6907.7,
+          "who": "injected",
+          "state": "started"
+        },
+        {
+          "t": 9075.2,
+          "who": "injected",
+          "state": "completed"
+        },
+        {
+          "t": 9078.3,
+          "who": "original",
+          "state": "completed"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2495.2,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 6907.1,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 6780.6,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "El comando ha terminado exitosamente, rápido como una OTTER.",
+      "textAfterR1": "",
+      "sequence": [
+        "-4097 command_lifecycle",
+        "-4092 command_lifecycle",
+        "-3896 system:init",
+        "-3891 system:status",
+        "-2495 user:string:replay",
+        "-2495 se:message_start",
+        "-2494 se:content_block_start:thinking",
+        "-2050 system:thinking_tokens",
+        "-2050 se:content_block_delta:thinking_delta x2",
+        "-1803 system:thinking_tokens",
+        "-1803 se:content_block_delta:signature_delta",
+        "-1801 assistant:thinking",
+        "-1801 se:content_block_stop",
+        "-1800 se:content_block_start:tool_use",
+        "-1800 se:content_block_delta:input_json_delta x6",
+        "-1504 assistant:tool_use",
+        "-1502 se:content_block_stop",
+        "-1486 se:message_delta",
+        "-1486 se:message_stop",
+        "2 command_lifecycle",
+        "1538 system:task_started",
+        "6704 system:task_notification",
+        "6781 user:tool_result",
+        "6907 user:string:replay",
+        "6908 command_lifecycle",
+        "6908 system:status",
+        "7658 se:message_start",
+        "7658 se:content_block_start:thinking",
+        "7987 system:thinking_tokens",
+        "7987 se:content_block_delta:thinking_delta x2",
+        "8515 system:thinking_tokens",
+        "8515 se:content_block_delta:signature_delta",
+        "8516 assistant:thinking",
+        "8517 se:content_block_stop",
+        "8517 se:content_block_start:text",
+        "8518 se:content_block_delta:text_delta x7",
+        "8678 assistant:text",
+        "8678 se:content_block_stop",
+        "8688 se:message_delta",
+        "8688 se:message_stop",
+        "9075 command_lifecycle",
+        "9077 result:success",
+        "9078 command_lifecycle"
+      ]
+    },
+    {
+      "kind": "bash",
+      "priority": "next",
+      "word": "MAPLE",
+      "verdict": "injected-into-current-turn",
+      "triggerAt": 2166.2,
+      "injectAfterTrigger": 1503.4,
+      "result1": {
+        "t": 8849.4,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 2,
+        "queued_turn_count": 0,
+        "result_index": 2
+      },
+      "result2": null,
+      "toolResultAt": 6806.2,
+      "lifecycle": [
+        {
+          "t": -3668.3,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -3665.2,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 1,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 7033.9,
+          "who": "injected",
+          "state": "started"
+        },
+        {
+          "t": 8847,
+          "who": "injected",
+          "state": "completed"
+        },
+        {
+          "t": 8850.3,
+          "who": "original",
+          "state": "completed"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2186.6,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 7033.1,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [
+        {
+          "t": 6806.2,
+          "label": "user:tool_result",
+          "mentionsWord": false
+        }
+      ],
+      "textBeforeR1": "El comando ha terminado, dorado como una hoja de MAPLE.",
+      "textAfterR1": "",
+      "sequence": [
+        "-3668 command_lifecycle",
+        "-3665 command_lifecycle",
+        "-3538 system:init",
+        "-3537 system:status",
+        "-2187 user:string:replay",
+        "-2186 se:message_start",
+        "-2186 se:content_block_start:thinking",
+        "-1879 system:thinking_tokens",
+        "-1879 se:content_block_delta:thinking_delta x2",
+        "-1725 system:thinking_tokens",
+        "-1725 se:content_block_delta:signature_delta",
+        "-1724 assistant:thinking",
+        "-1724 se:content_block_stop",
+        "-1724 se:content_block_start:tool_use",
+        "-1723 se:content_block_delta:input_json_delta x5",
+        "-1503 assistant:tool_use",
+        "-1502 se:content_block_stop",
+        "-1493 se:message_delta",
+        "-1493 se:message_stop",
+        "1 command_lifecycle",
+        "1520 system:task_started",
+        "6635 system:task_notification",
+        "6806 user:tool_result",
+        "7033 user:string:replay",
+        "7034 command_lifecycle",
+        "7034 system:status",
+        "7791 se:message_start",
+        "7792 se:content_block_start:thinking",
+        "8089 se:content_block_delta:thinking_delta",
+        "8089 se:content_block_delta:signature_delta",
+        "8090 assistant:thinking",
+        "8090 se:content_block_stop",
+        "8091 se:content_block_start:text",
+        "8091 se:content_block_delta:text_delta x8",
+        "8280 assistant:text",
+        "8280 se:content_block_stop",
+        "8291 se:message_delta",
+        "8291 se:message_stop",
+        "8847 command_lifecycle",
+        "8849 result:success",
+        "8850 command_lifecycle"
+      ]
+    },
+    {
+      "kind": "text",
+      "priority": "default",
+      "word": "ZEBRA",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 6171.6,
+      "injectAfterTrigger": 801.2,
+      "result1": {
+        "t": 486.8,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 1,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "result2": {
+        "t": 2099,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 1
+      },
+      "toolResultAt": null,
+      "lifecycle": [
+        {
+          "t": -5616.8,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -5614.2,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 0.9,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 488.8,
+          "who": "original",
+          "state": "completed"
+        },
+        {
+          "t": 489.9,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -4667.4,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 1192.2,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [],
+      "textBeforeR1": "dillo\n46. Kangaroo\n47. Koala\n48. Wombat\n49. Platypus\n50. Camel\n51. Llama\n52. Alpaca\n53. Horse\n54. Donkey\n55. Cow\n56. Buffalo\n57. Sheep\n58. Goat\n59. Pig\n60. Duck",
+      "textAfterR1": "ZEBRA",
+      "sequence": [
+        "-5908 system:hook_started",
+        "-5908 system:hook_started",
+        "-5908 system:hook_started",
+        "-5908 system:hook_response",
+        "-5833 system:hook_response",
+        "-5678 system:hook_response",
+        "-5617 command_lifecycle",
+        "-5614 command_lifecycle",
+        "-5374 system:init",
+        "-5369 system:status",
+        "-4667 user:string:replay",
+        "-4667 se:message_start",
+        "-4667 se:content_block_start:thinking",
+        "-4253 system:thinking_tokens",
+        "-4253 se:content_block_delta:thinking_delta",
+        "-3050 system:thinking_tokens",
+        "-3050 se:content_block_delta:thinking_delta",
+        "-1865 system:thinking_tokens",
+        "-1865 se:content_block_delta:thinking_delta x2",
+        "-806 system:thinking_tokens",
+        "-806 se:content_block_delta:signature_delta",
+        "-802 assistant:thinking",
+        "-802 se:content_block_stop",
+        "-802 se:content_block_start:text",
+        "-801 se:content_block_delta:text_delta x33",
+        "1 command_lifecycle",
+        "19 se:content_block_delta:text_delta x10",
+        "245 assistant:text",
+        "246 se:content_block_stop",
+        "263 se:message_delta",
+        "263 se:message_stop",
+        "264 rate_limit_event",
+        "487 result:success",
+        "489 command_lifecycle",
+        "490 command_lifecycle",
+        "626 system:init",
+        "627 system:status",
+        "1192 user:string:replay",
+        "1192 se:message_start",
+        "1193 se:content_block_start:thinking",
+        "1644 system:thinking_tokens",
+        "1644 se:content_block_delta:thinking_delta x2",
+        "1844 system:thinking_tokens",
+        "1844 se:content_block_delta:signature_delta",
+        "1845 assistant:thinking",
+        "1846 se:content_block_stop",
+        "1846 se:content_block_start:text",
+        "1846 se:content_block_delta:text_delta",
+        "1847 assistant:text",
+        "1847 se:content_block_stop",
+        "1858 se:message_delta",
+        "1858 se:message_stop",
+        "2099 result:success"
+      ]
+    },
+    {
+      "kind": "text",
+      "priority": "default",
+      "word": "OTTER",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 2663.1,
+      "injectAfterTrigger": 803.5,
+      "result1": {
+        "t": 513.9,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 1,
+        "queued_turn_count": 0,
+        "result_index": 2
+      },
+      "result2": {
+        "t": 1929.9,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 3
+      },
+      "toolResultAt": null,
+      "lifecycle": [
+        {
+          "t": -3465.4,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -3464.6,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 0.8,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 515.1,
+          "who": "original",
+          "state": "completed"
+        },
+        {
+          "t": 516.1,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -2854.1,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 1333.9,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [],
+      "textBeforeR1": "dillo\n46. Kangaroo\n47. Koala\n48. Wombat\n49. Platypus\n50. Camel\n51. Llama\n52. Alpaca\n53. Horse\n54. Donkey\n55. Cow\n56. Buffalo\n57. Sheep\n58. Goat\n59. Pig\n60. Duck",
+      "textAfterR1": "OTTER",
+      "sequence": [
+        "-3465 command_lifecycle",
+        "-3465 command_lifecycle",
+        "-3339 system:init",
+        "-3338 system:status",
+        "-2854 user:string:replay",
+        "-2854 se:message_start",
+        "-2854 se:content_block_start:thinking",
+        "-2444 system:thinking_tokens",
+        "-2444 se:content_block_delta:thinking_delta",
+        "-979 system:thinking_tokens",
+        "-979 se:content_block_delta:thinking_delta x2",
+        "-805 se:content_block_delta:signature_delta",
+        "-804 assistant:thinking",
+        "-804 se:content_block_stop",
+        "-804 se:content_block_start:text",
+        "-803 se:content_block_delta:text_delta x33",
+        "1 command_lifecycle",
+        "37 se:content_block_delta:text_delta x11",
+        "273 assistant:text",
+        "273 se:content_block_stop",
+        "287 se:message_delta",
+        "287 se:message_stop",
+        "514 result:success",
+        "515 command_lifecycle",
+        "516 command_lifecycle",
+        "646 system:init",
+        "647 system:status",
+        "1334 user:string:replay",
+        "1334 se:message_start",
+        "1334 se:content_block_start:thinking",
+        "1658 se:content_block_delta:thinking_delta",
+        "1659 se:content_block_delta:signature_delta",
+        "1660 assistant:thinking",
+        "1660 se:content_block_stop",
+        "1660 se:content_block_start:text",
+        "1661 se:content_block_delta:text_delta",
+        "1661 assistant:text",
+        "1661 se:content_block_stop",
+        "1669 se:message_delta",
+        "1669 se:message_stop",
+        "1930 result:success"
+      ]
+    },
+    {
+      "kind": "text",
+      "priority": "default",
+      "word": "MAPLE",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 1228,
+      "injectAfterTrigger": 805.7,
+      "result1": {
+        "t": 495.1,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "num_turns": 1,
+        "queued_turn_count": 0,
+        "result_index": 4
+      },
+      "result2": {
+        "t": 1727.9,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 5
+      },
+      "toolResultAt": null,
+      "lifecycle": [
+        {
+          "t": -2032,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -2030.8,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 0.7,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 496.2,
+          "who": "original",
+          "state": "completed"
+        },
+        {
+          "t": 497.2,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -1255.2,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 1209.3,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [],
+      "textBeforeR1": "dillo\n46. Kangaroo\n47. Koala\n48. Wombat\n49. Platypus\n50. Camel\n51. Llama\n52. Alpaca\n53. Horse\n54. Donkey\n55. Cow\n56. Buffalo\n57. Sheep\n58. Goat\n59. Pig\n60. Duck",
+      "textAfterR1": "MAPLE",
+      "sequence": [
+        "-2032 command_lifecycle",
+        "-2031 command_lifecycle",
+        "-1836 system:init",
+        "-1835 system:status",
+        "-1255 user:string:replay",
+        "-1255 se:message_start",
+        "-1255 se:content_block_start:thinking",
+        "-937 system:thinking_tokens",
+        "-937 se:content_block_delta:thinking_delta x2",
+        "-807 system:thinking_tokens",
+        "-807 se:content_block_delta:signature_delta",
+        "-806 assistant:thinking",
+        "-806 se:content_block_stop",
+        "-806 se:content_block_start:text",
+        "-806 se:content_block_delta:text_delta x35",
+        "1 command_lifecycle",
+        "24 se:content_block_delta:text_delta x10",
+        "246 assistant:text",
+        "246 se:content_block_stop",
+        "257 se:message_delta",
+        "258 se:message_stop",
+        "495 result:success",
+        "496 command_lifecycle",
+        "497 command_lifecycle",
+        "630 system:init",
+        "631 system:status",
+        "1209 user:string:replay",
+        "1209 se:message_start",
+        "1210 se:content_block_start:thinking",
+        "1490 se:content_block_delta:thinking_delta",
+        "1490 se:content_block_delta:signature_delta",
+        "1491 assistant:thinking",
+        "1491 se:content_block_stop",
+        "1491 se:content_block_start:text",
+        "1491 se:content_block_delta:text_delta",
+        "1492 assistant:text",
+        "1492 se:content_block_stop",
+        "1504 se:message_delta",
+        "1505 se:message_stop",
+        "1728 result:success"
+      ]
+    },
+    {
+      "kind": "text",
+      "priority": "now",
+      "word": "ZEBRA",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 6089.9,
+      "injectAfterTrigger": 807.9,
+      "result1": {
+        "t": 10,
+        "subtype": "success",
+        "terminal_reason": "aborted_streaming",
+        "num_turns": 1,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "result2": {
+        "t": 4556,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 1
+      },
+      "toolResultAt": null,
+      "lifecycle": [
+        {
+          "t": -5791.8,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -5789.6,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 2.4,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 12,
+          "who": "original",
+          "state": "cancelled"
+        },
+        {
+          "t": 13.2,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -4623.8,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 1008.3,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [],
+      "textBeforeR1": "ingüino\n12. Oso polar\n13. Reno\n14. Lobo\n15. Zorro\n16. Águila\n17. Búho\n18. Pinguino\n19. Flamenco\n20. Pelicano\n21. Tigre\n22. Leopardo\n23. Pantera\n24. Puma\n25. Jag",
+      "textAfterR1": "1. León\n2. Elefante\n3. Jirafa\n4. Cebra\n5. Hiena\n6. Gacela\n7. Búfalo\n8. Rinoceronte\n9. Hipopótamo\n10. Cocodrilo\n11. Pingüino\n12. Oso polar\n13. Reno\n14. Lobo\n15. ",
+      "sequence": [
+        "-5827 system:hook_started",
+        "-5827 system:hook_started",
+        "-5827 system:hook_started",
+        "-5827 system:hook_response",
+        "-5827 system:hook_response",
+        "-5822 system:hook_response",
+        "-5792 command_lifecycle",
+        "-5790 command_lifecycle",
+        "-5589 system:init",
+        "-5584 system:status",
+        "-4624 user:string:replay",
+        "-4624 se:message_start",
+        "-4623 se:content_block_start:thinking",
+        "-4180 system:thinking_tokens",
+        "-4180 se:content_block_delta:thinking_delta",
+        "-3138 system:thinking_tokens",
+        "-3138 se:content_block_delta:thinking_delta",
+        "-1964 system:thinking_tokens",
+        "-1964 se:content_block_delta:thinking_delta",
+        "-838 system:thinking_tokens",
+        "-838 se:content_block_delta:thinking_delta x2",
+        "-813 system:thinking_tokens",
+        "-813 se:content_block_delta:signature_delta",
+        "-809 assistant:thinking",
+        "-809 se:content_block_stop",
+        "-808 se:content_block_start:text",
+        "-808 se:content_block_delta:text_delta x33",
+        "2 command_lifecycle",
+        "4 assistant:text",
+        "10 result:success",
+        "12 command_lifecycle",
+        "13 command_lifecycle",
+        "157 system:init",
+        "158 system:status",
+        "1008 user:string:replay",
+        "1008 se:message_start",
+        "1009 se:content_block_start:thinking",
+        "1692 system:thinking_tokens",
+        "1692 se:content_block_delta:thinking_delta x2",
+        "2446 system:thinking_tokens",
+        "2446 se:content_block_delta:signature_delta",
+        "2448 assistant:thinking",
+        "2448 se:content_block_stop",
+        "2448 se:content_block_start:text",
+        "2449 se:content_block_delta:text_delta x75",
+        "4297 assistant:text",
+        "4297 se:content_block_stop",
+        "4312 se:message_delta",
+        "4312 se:message_stop",
+        "4313 rate_limit_event",
+        "4556 result:success"
+      ]
+    },
+    {
+      "kind": "text",
+      "priority": "now",
+      "word": "OTTER",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 1724.7,
+      "injectAfterTrigger": 800.4,
+      "result1": {
+        "t": 4.6,
+        "subtype": "success",
+        "terminal_reason": "aborted_streaming",
+        "num_turns": 1,
+        "queued_turn_count": 0,
+        "result_index": 2
+      },
+      "result2": {
+        "t": 5026.6,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 3
+      },
+      "toolResultAt": null,
+      "lifecycle": [
+        {
+          "t": -2523.8,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -2522.9,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 0.8,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 5.5,
+          "who": "original",
+          "state": "cancelled"
+        },
+        {
+          "t": 6.5,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -1567.7,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 2003.6,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [],
+      "textBeforeR1": "la\n13. Marlin\n14. Pez espada\n15. Atún\n16. Salmón\n17. Trucha\n18. Carpa\n19. Pirañá\n20. Pez globo\n21. Caballito de mar\n22. Estrella de mar\n23. Erizo de mar\n24. Pep",
+      "textAfterR1": "1. Liebre\n2. Conejo\n3. Ardilla\n4. Castañeta\n5. Tejón\n6. Nutria\n7. Foca\n8. León marino\n9. Morsa\n10. Ballena azul\n11. Orca\n12. Delfín nariz de botella\n13. Marlin\n",
+      "sequence": [
+        "-2524 command_lifecycle",
+        "-2523 command_lifecycle",
+        "-2389 system:init",
+        "-2388 system:status",
+        "-1568 user:string:replay",
+        "-1568 se:message_start",
+        "-1567 se:content_block_start:thinking",
+        "-1163 system:thinking_tokens",
+        "-1163 se:content_block_delta:thinking_delta x2",
+        "-802 system:thinking_tokens",
+        "-802 se:content_block_delta:signature_delta",
+        "-801 assistant:thinking",
+        "-801 se:content_block_stop",
+        "-801 se:content_block_start:text",
+        "-800 se:content_block_delta:text_delta x33",
+        "1 command_lifecycle",
+        "1 assistant:text",
+        "5 result:success",
+        "6 command_lifecycle",
+        "7 command_lifecycle",
+        "148 system:init",
+        "149 system:status",
+        "2004 user:string:replay",
+        "2004 se:message_start",
+        "2004 se:content_block_start:thinking",
+        "2469 system:thinking_tokens",
+        "2469 se:content_block_delta:thinking_delta x2",
+        "2671 system:thinking_tokens",
+        "2671 se:content_block_delta:signature_delta",
+        "2672 assistant:thinking",
+        "2672 se:content_block_stop",
+        "2672 se:content_block_start:text",
+        "2672 se:content_block_delta:text_delta x85",
+        "4782 assistant:text",
+        "4782 se:content_block_stop",
+        "4801 se:message_delta",
+        "4801 se:message_stop",
+        "5027 result:success"
+      ]
+    },
+    {
+      "kind": "text",
+      "priority": "now",
+      "word": "MAPLE",
+      "verdict": "queued-as-next-turn",
+      "triggerAt": 1525.7,
+      "injectAfterTrigger": 806.4,
+      "result1": {
+        "t": 5.2,
+        "subtype": "success",
+        "terminal_reason": "aborted_streaming",
+        "num_turns": 1,
+        "queued_turn_count": 0,
+        "result_index": 4
+      },
+      "result2": {
+        "t": 3658.4,
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "queued_turn_count": 0,
+        "result_index": 5
+      },
+      "toolResultAt": null,
+      "lifecycle": [
+        {
+          "t": -2331.1,
+          "who": "original",
+          "state": "queued"
+        },
+        {
+          "t": -2330.2,
+          "who": "original",
+          "state": "started"
+        },
+        {
+          "t": 0.8,
+          "who": "injected",
+          "state": "queued"
+        },
+        {
+          "t": 6.3,
+          "who": "original",
+          "state": "cancelled"
+        },
+        {
+          "t": 7.5,
+          "who": "injected",
+          "state": "started"
+        }
+      ],
+      "replays": [
+        {
+          "t": -1299.4,
+          "who": "original",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        },
+        {
+          "t": 951.7,
+          "who": "injected",
+          "keys": [
+            "type",
+            "message",
+            "session_id",
+            "parent_tool_use_id",
+            "uuid",
+            "timestamp",
+            "isReplay"
+          ]
+        }
+      ],
+      "userEvents": [],
+      "textBeforeR1": "co\n10. Ciervo\n11. Alce\n12. Ante\n13. Gamo\n14. Corzo\n15. Jabalí\n16. Pecarí\n17. Camello\n18. Dromedario\n19. Alpaca\n20. Llama\n21. Vicuña\n22. Guanaco\n23. Cabra montés",
+      "textAfterR1": "1. Mono\n2. Chimpancé\n3. Gorila\n4. Orangután\n5. Gibón\n6. Lémur\n7. Mandril\n8. Babuino\n9. Macaco\n10. Ciervo\n11. Alce\n12. Ante\n13. Gamo\n14. Corzo\n15. Jabalí\n16. Pec",
+      "sequence": [
+        "-2331 command_lifecycle",
+        "-2330 command_lifecycle",
+        "-2201 system:init",
+        "-2200 system:status",
+        "-1299 user:string:replay",
+        "-1299 se:message_start",
+        "-1299 se:content_block_start:thinking",
+        "-981 system:thinking_tokens",
+        "-981 se:content_block_delta:thinking_delta x2",
+        "-808 system:thinking_tokens",
+        "-808 se:content_block_delta:signature_delta",
+        "-807 assistant:thinking",
+        "-807 se:content_block_stop",
+        "-807 se:content_block_start:text",
+        "-806 se:content_block_delta:text_delta x33",
+        "1 command_lifecycle",
+        "1 assistant:text",
+        "5 result:success",
+        "6 command_lifecycle",
+        "7 command_lifecycle",
+        "137 system:init",
+        "137 system:status",
+        "952 user:string:replay",
+        "952 se:message_start",
+        "952 se:content_block_start:thinking",
+        "1440 system:thinking_tokens",
+        "1440 se:content_block_delta:thinking_delta x2",
+        "1642 system:thinking_tokens",
+        "1642 se:content_block_delta:signature_delta",
+        "1643 assistant:thinking",
+        "1644 se:content_block_stop",
+        "1644 se:content_block_start:text",
+        "1644 se:content_block_delta:text_delta x72",
+        "3429 assistant:text",
+        "3429 se:content_block_stop",
+        "3444 se:message_delta",
+        "3444 se:message_stop",
+        "3658 result:success"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1117 @@
+{
+  "name": "a1-a2-basic",
+  "claudeVersion": "2.1.289",
+  "at": "2026-11-02T17:51:39.026Z",
+  "summary": {
+    "spawnToInitializeResponse": {
+      "n": 3,
+      "median": 1191.5,
+      "min": 1182.1,
+      "max": 1201.5
+    },
+    "spawnToSystemInit_initFirst": {
+      "n": 3,
+      "median": 1397.2,
+      "min": 1395.4,
+      "max": 1402.5
+    },
+    "spawnToSystemInit_messageFirst": {
+      "n": 3,
+      "median": 1332.1,
+      "min": 1325.2,
+      "max": 2280.5
+    },
+    "firstTurn_writeToFirstTextDelta_messageFirst": {
+      "n": 3,
+      "median": 4074.3,
+      "min": 3578,
+      "max": 6519.7
+    },
+    "firstTurn_writeToResult_messageFirst": {
+      "n": 3,
+      "median": 4311.3,
+      "min": 3868.6,
+      "max": 6784
+    },
+    "firstTurn_writeToFirstTextDelta_initFirst": {
+      "n": 3,
+      "median": 3384.6,
+      "min": 2314,
+      "max": 4174.4
+    },
+    "warmTurns_writeToFirstLine": {
+      "n": 12,
+      "median": 140.1,
+      "min": 131.2,
+      "max": 152.1
+    },
+    "warmTurns_writeToMessageStart": {
+      "n": 12,
+      "median": 812,
+      "min": 658.4,
+      "max": 1059.3
+    },
+    "warmTurns_writeToFirstTextDelta": {
+      "n": 12,
+      "median": 1121,
+      "min": 781.1,
+      "max": 1899.1
+    },
+    "warmTurns_writeToResult": {
+      "n": 12,
+      "median": 1364.3,
+      "min": 1018.8,
+      "max": 2178.6
+    },
+    "stdinCloseToExit": {
+      "n": 6,
+      "median": 430.4,
+      "min": 369.4,
+      "max": 534.4
+    },
+    "allSameSession": true,
+    "allCorrect": true
+  },
+  "runs": [
+    {
+      "mode": "initialize-first",
+      "rep": 0,
+      "spawnToInitializeResponse": 1191.5,
+      "initializeResponseKeys": [
+        "commands",
+        "agents",
+        "output_style",
+        "available_output_styles",
+        "user_output_styles_dir",
+        "models",
+        "account",
+        "pid",
+        "current_permission_mode",
+        "feedback_mode",
+        "analytics_disabled",
+        "remote_control_auto_enable",
+        "remote_control_auto_connect_default",
+        "remote_control_available",
+        "remote_control_auto_on_by_default",
+        "ide_rc_auto_enable_gate",
+        "fast_mode_state",
+        "fast_mode_disabled_reason",
+        "session_state",
+        "capabilities"
+      ],
+      "account": {
+        "subscriptionType": "Claude Ultra",
+        "apiProvider": "firstParty",
+        "hasEmail": true
+      },
+      "initializeCapabilities": [
+        "ui_surface_v1"
+      ],
+      "current_permission_mode": "default",
+      "spawnToSystemInit": 1402.5,
+      "firstWriteAt": 1192.6,
+      "initCount": 3,
+      "sameSessionAcrossTurns": true,
+      "sessionId": "91c8ce5a-5f04-44c9-a7e9-a9e137c8dd0b",
+      "init": {
+        "apiKeySource": "none",
+        "model": "claude-haiku-4-5-20251001",
+        "permissionMode": "default",
+        "cwd": "E:\\tmp\\claude-stream-spike",
+        "claude_code_version": "2.1.289",
+        "output_style": "default",
+        "capabilities": [
+          "interrupt_receipt_v1",
+          "interrupt_cancel_queued_v1",
+          "interrupt_send_now_v1",
+          "msg_lifecycle_v1",
+          "sdk_mcp_tools_list_changed",
+          "sdk_mcp_manifests",
+          "mcp_read_resource_v1",
+          "mcp_tool_ui_meta_v1",
+          "ui_surface_v1"
+        ],
+        "counts": {
+          "tools": 61,
+          "mcpTools": 26,
+          "slash_commands": 109,
+          "skills": 70,
+          "agents": 10,
+          "plugins": 6,
+          "mcp_servers": 9
+        },
+        "keys": [
+          "type",
+          "subtype",
+          "cwd",
+          "session_id",
+          "tools",
+          "mcp_servers",
+          "model",
+          "permissionMode",
+          "slash_commands",
+          "terminal_slash_commands",
+          "apiKeySource",
+          "claude_code_version",
+          "output_style",
+          "agents",
+          "skills",
+          "plugins",
+          "capabilities",
+          "analytics_disabled",
+          "product_feedback_disabled",
+          "uuid",
+          "memory_paths",
+          "messaging_socket_path",
+          "fast_mode_state",
+          "fast_mode_disabled_reason",
+          "per_turn_effort_active",
+          "view_mode",
+          "powershell_path"
+        ]
+      },
+      "envHasApiKey": false,
+      "turns": [
+        {
+          "writeToFirstLine": 209.9,
+          "firstLabel": "system:init",
+          "writeToInit": 209.9,
+          "writeToStatusRequesting": 214.5,
+          "writeToMessageStart": 1054.7,
+          "writeToFirstTextDelta": 4174.4,
+          "writeToResult": 4443.3,
+          "resultSubtype": "success",
+          "resultText": "ONE",
+          "resultFields": {
+            "ttft_ms": 4160,
+            "duration_ms": 4433,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 0,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "91c8ce5a-5f04-44c9-a7e9-a9e137c8dd0b"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "rate_limit_event",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 151.6,
+          "firstLabel": "system:init",
+          "writeToInit": 151.6,
+          "writeToStatusRequesting": 153.1,
+          "writeToMessageStart": 1059.3,
+          "writeToFirstTextDelta": 1899.1,
+          "writeToResult": 2178.6,
+          "resultSubtype": "success",
+          "resultText": "TWO",
+          "resultFields": {
+            "ttft_ms": 1894,
+            "duration_ms": 2174,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 1,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "91c8ce5a-5f04-44c9-a7e9-a9e137c8dd0b"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 141.5,
+          "firstLabel": "system:init",
+          "writeToInit": 141.5,
+          "writeToStatusRequesting": 142.2,
+          "writeToMessageStart": 864,
+          "writeToFirstTextDelta": 1184.8,
+          "writeToResult": 1439.6,
+          "resultSubtype": "success",
+          "resultText": "THREE",
+          "resultFields": {
+            "ttft_ms": 1182,
+            "duration_ms": 1436,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 2,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "91c8ce5a-5f04-44c9-a7e9-a9e137c8dd0b"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        }
+      ],
+      "texts": [
+        "ONE",
+        "TWO",
+        "THREE"
+      ],
+      "stderr": "",
+      "stdinCloseToExit": 369.4,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "initialize-first",
+      "rep": 1,
+      "spawnToInitializeResponse": 1201.5,
+      "spawnToSystemInit": 1395.4,
+      "firstWriteAt": 1201.7,
+      "initCount": 3,
+      "sameSessionAcrossTurns": true,
+      "sessionId": "ea62a93f-6807-4c5d-800f-f81a9c6ddd9f",
+      "envHasApiKey": false,
+      "turns": [
+        {
+          "writeToFirstLine": 193.7,
+          "firstLabel": "system:init",
+          "writeToInit": 193.7,
+          "writeToStatusRequesting": 199.7,
+          "writeToMessageStart": 1060.5,
+          "writeToFirstTextDelta": 2314,
+          "writeToResult": 2569.4,
+          "resultSubtype": "success",
+          "resultText": "ONE",
+          "resultFields": {
+            "ttft_ms": 2302,
+            "duration_ms": 2560,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 0,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "ea62a93f-6807-4c5d-800f-f81a9c6ddd9f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "rate_limit_event",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 149.9,
+          "firstLabel": "system:init",
+          "writeToInit": 149.9,
+          "writeToStatusRequesting": 151.1,
+          "writeToMessageStart": 691.9,
+          "writeToFirstTextDelta": 984.3,
+          "writeToResult": 1277.7,
+          "resultSubtype": "success",
+          "resultText": "TWO",
+          "resultFields": {
+            "ttft_ms": 979,
+            "duration_ms": 1273,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 1,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "ea62a93f-6807-4c5d-800f-f81a9c6ddd9f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta x2",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 133,
+          "firstLabel": "system:init",
+          "writeToInit": 133,
+          "writeToStatusRequesting": 133.7,
+          "writeToMessageStart": 658.4,
+          "writeToFirstTextDelta": 781.1,
+          "writeToResult": 1018.8,
+          "resultSubtype": "success",
+          "resultText": "THREE",
+          "resultFields": {
+            "ttft_ms": 778,
+            "duration_ms": 1007,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 2,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "ea62a93f-6807-4c5d-800f-f81a9c6ddd9f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        }
+      ],
+      "texts": [
+        "ONE",
+        "TWO",
+        "THREE"
+      ],
+      "stderr": "",
+      "stdinCloseToExit": 534.4,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "initialize-first",
+      "rep": 2,
+      "spawnToInitializeResponse": 1182.1,
+      "spawnToSystemInit": 1397.2,
+      "firstWriteAt": 1182.4,
+      "initCount": 3,
+      "sameSessionAcrossTurns": true,
+      "sessionId": "1f50da58-b49a-4f65-abec-c444db1b3c3b",
+      "envHasApiKey": false,
+      "turns": [
+        {
+          "writeToFirstLine": 214.8,
+          "firstLabel": "system:init",
+          "writeToInit": 214.8,
+          "writeToStatusRequesting": 219.2,
+          "writeToMessageStart": 1005.9,
+          "writeToFirstTextDelta": 3384.6,
+          "writeToResult": 3632.6,
+          "resultSubtype": "success",
+          "resultText": "ONE",
+          "resultFields": {
+            "ttft_ms": 3370,
+            "duration_ms": 3622,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 0,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "1f50da58-b49a-4f65-abec-c444db1b3c3b"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "rate_limit_event",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 139.7,
+          "firstLabel": "system:init",
+          "writeToInit": 139.7,
+          "writeToStatusRequesting": 140.8,
+          "writeToMessageStart": 879.8,
+          "writeToFirstTextDelta": 1712.2,
+          "writeToResult": 1958.9,
+          "resultSubtype": "success",
+          "resultText": "TWO",
+          "resultFields": {
+            "ttft_ms": 1707,
+            "duration_ms": 1954,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 1,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "1f50da58-b49a-4f65-abec-c444db1b3c3b"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 131.2,
+          "firstLabel": "system:init",
+          "writeToInit": 131.2,
+          "writeToStatusRequesting": 131.8,
+          "writeToMessageStart": 811.8,
+          "writeToFirstTextDelta": 995.8,
+          "writeToResult": 1225.3,
+          "resultSubtype": "success",
+          "resultText": "THREE",
+          "resultFields": {
+            "ttft_ms": 992,
+            "duration_ms": 1222,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 2,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "1f50da58-b49a-4f65-abec-c444db1b3c3b"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        }
+      ],
+      "texts": [
+        "ONE",
+        "TWO",
+        "THREE"
+      ],
+      "stderr": "",
+      "stdinCloseToExit": 452.3,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "message-first",
+      "rep": 0,
+      "spawnToSystemInit": 1325.2,
+      "firstWriteAt": 7.4,
+      "initCount": 3,
+      "sameSessionAcrossTurns": true,
+      "sessionId": "eb72b19c-60a5-498b-83f2-63b76eec49b6",
+      "init": {
+        "apiKeySource": "none",
+        "model": "claude-haiku-4-5-20251001",
+        "permissionMode": "default",
+        "cwd": "E:\\tmp\\claude-stream-spike",
+        "claude_code_version": "2.1.289",
+        "output_style": "default",
+        "capabilities": [
+          "interrupt_receipt_v1",
+          "interrupt_cancel_queued_v1",
+          "interrupt_send_now_v1",
+          "msg_lifecycle_v1",
+          "sdk_mcp_tools_list_changed",
+          "sdk_mcp_manifests",
+          "mcp_read_resource_v1",
+          "mcp_tool_ui_meta_v1",
+          "ui_surface_v1"
+        ],
+        "counts": {
+          "tools": 61,
+          "mcpTools": 26,
+          "slash_commands": 109,
+          "skills": 70,
+          "agents": 10,
+          "plugins": 6,
+          "mcp_servers": 9
+        },
+        "keys": [
+          "type",
+          "subtype",
+          "cwd",
+          "session_id",
+          "tools",
+          "mcp_servers",
+          "model",
+          "permissionMode",
+          "slash_commands",
+          "terminal_slash_commands",
+          "apiKeySource",
+          "claude_code_version",
+          "output_style",
+          "agents",
+          "skills",
+          "plugins",
+          "capabilities",
+          "analytics_disabled",
+          "product_feedback_disabled",
+          "uuid",
+          "memory_paths",
+          "messaging_socket_path",
+          "fast_mode_state",
+          "fast_mode_disabled_reason",
+          "per_turn_effort_active",
+          "view_mode",
+          "powershell_path"
+        ]
+      },
+      "envHasApiKey": false,
+      "turns": [
+        {
+          "writeToFirstLine": 1015.7,
+          "firstLabel": "system:hook_started",
+          "writeToInit": 1317.8,
+          "writeToStatusRequesting": 1323.1,
+          "writeToMessageStart": 2561.1,
+          "writeToFirstTextDelta": 4074.3,
+          "writeToResult": 4311.3,
+          "resultSubtype": "success",
+          "resultText": "ONE",
+          "resultFields": {
+            "ttft_ms": 2948,
+            "duration_ms": 3188,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 0,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "eb72b19c-60a5-498b-83f2-63b76eec49b6"
+          ],
+          "sequence": [
+            "system:hook_started",
+            "system:hook_started",
+            "system:hook_started",
+            "system:hook_response",
+            "system:hook_response",
+            "system:hook_response",
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "rate_limit_event",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 136.5,
+          "firstLabel": "system:init",
+          "writeToInit": 136.5,
+          "writeToStatusRequesting": 137.7,
+          "writeToMessageStart": 847.2,
+          "writeToFirstTextDelta": 1379.1,
+          "writeToResult": 1630.8,
+          "resultSubtype": "success",
+          "resultText": "TWO",
+          "resultFields": {
+            "ttft_ms": 1373,
+            "duration_ms": 1625,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 1,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "eb72b19c-60a5-498b-83f2-63b76eec49b6"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 133.4,
+          "firstLabel": "system:init",
+          "writeToInit": 133.4,
+          "writeToStatusRequesting": 134.1,
+          "writeToMessageStart": 812.1,
+          "writeToFirstTextDelta": 1057.2,
+          "writeToResult": 1289.1,
+          "resultSubtype": "success",
+          "resultText": "THREE",
+          "resultFields": {
+            "ttft_ms": 1054,
+            "duration_ms": 1285,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 2,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "eb72b19c-60a5-498b-83f2-63b76eec49b6"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        }
+      ],
+      "texts": [
+        "ONE",
+        "TWO",
+        "THREE"
+      ],
+      "stderr": "",
+      "stdinCloseToExit": 408.5,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "message-first",
+      "rep": 1,
+      "spawnToSystemInit": 2280.5,
+      "firstWriteAt": 7.8,
+      "initCount": 3,
+      "sameSessionAcrossTurns": true,
+      "sessionId": "86ffa862-c45f-4b78-b1fe-54d5e544fc5f",
+      "envHasApiKey": false,
+      "turns": [
+        {
+          "writeToFirstLine": 1855.3,
+          "firstLabel": "system:hook_started",
+          "writeToInit": 2272.8,
+          "writeToStatusRequesting": 2277,
+          "writeToMessageStart": 3533.8,
+          "writeToFirstTextDelta": 6519.7,
+          "writeToResult": 6784,
+          "resultSubtype": "success",
+          "resultText": "ONE",
+          "resultFields": {
+            "ttft_ms": 4479,
+            "duration_ms": 4745,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 0,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "86ffa862-c45f-4b78-b1fe-54d5e544fc5f"
+          ],
+          "sequence": [
+            "system:hook_started",
+            "system:hook_started",
+            "system:hook_started",
+            "system:hook_response",
+            "system:hook_response",
+            "system:hook_response",
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "rate_limit_event",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 152.1,
+          "firstLabel": "system:init",
+          "writeToInit": 152.1,
+          "writeToStatusRequesting": 153.2,
+          "writeToMessageStart": 806.9,
+          "writeToFirstTextDelta": 1500.4,
+          "writeToResult": 1765.6,
+          "resultSubtype": "success",
+          "resultText": "TWO",
+          "resultFields": {
+            "ttft_ms": 1495,
+            "duration_ms": 1760,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 1,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "86ffa862-c45f-4b78-b1fe-54d5e544fc5f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta x2",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 140.5,
+          "firstLabel": "system:init",
+          "writeToInit": 140.5,
+          "writeToStatusRequesting": 141.3,
+          "writeToMessageStart": 777.6,
+          "writeToFirstTextDelta": 949,
+          "writeToResult": 1200.9,
+          "resultSubtype": "success",
+          "resultText": "THREE",
+          "resultFields": {
+            "ttft_ms": 945,
+            "duration_ms": 1197,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 2,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "86ffa862-c45f-4b78-b1fe-54d5e544fc5f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        }
+      ],
+      "texts": [
+        "ONE",
+        "TWO",
+        "THREE"
+      ],
+      "stderr": "",
+      "stdinCloseToExit": 384.4,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "message-first",
+      "rep": 2,
+      "spawnToSystemInit": 1332.1,
+      "firstWriteAt": 6.2,
+      "initCount": 3,
+      "sameSessionAcrossTurns": true,
+      "sessionId": "0539c7fa-fbd5-40a9-9f79-246d7606a08f",
+      "envHasApiKey": false,
+      "turns": [
+        {
+          "writeToFirstLine": 1062.2,
+          "firstLabel": "system:hook_started",
+          "writeToInit": 1325.9,
+          "writeToStatusRequesting": 1330.6,
+          "writeToMessageStart": 2033,
+          "writeToFirstTextDelta": 3578,
+          "writeToResult": 3868.6,
+          "resultSubtype": "success",
+          "resultText": "ONE",
+          "resultFields": {
+            "ttft_ms": 2443,
+            "duration_ms": 2737,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 0,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "0539c7fa-fbd5-40a9-9f79-246d7606a08f"
+          ],
+          "sequence": [
+            "system:hook_started",
+            "system:hook_started",
+            "system:hook_started",
+            "system:hook_response",
+            "system:hook_response",
+            "system:hook_response",
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "system:thinking_tokens",
+            "se:content_block_delta:thinking_delta x2",
+            "system:thinking_tokens",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "rate_limit_event",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 148.9,
+          "firstLabel": "system:init",
+          "writeToInit": 148.9,
+          "writeToStatusRequesting": 150.4,
+          "writeToMessageStart": 866.7,
+          "writeToFirstTextDelta": 1250.7,
+          "writeToResult": 1581.2,
+          "resultSubtype": "success",
+          "resultText": "TWO",
+          "resultFields": {
+            "ttft_ms": 1245,
+            "duration_ms": 1575,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 1,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "0539c7fa-fbd5-40a9-9f79-246d7606a08f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        },
+        {
+          "writeToFirstLine": 132,
+          "firstLabel": "system:init",
+          "writeToInit": 132,
+          "writeToStatusRequesting": 132.8,
+          "writeToMessageStart": 810,
+          "writeToFirstTextDelta": 1003.4,
+          "writeToResult": 1268.2,
+          "resultSubtype": "success",
+          "resultText": "THREE",
+          "resultFields": {
+            "ttft_ms": 1000,
+            "duration_ms": 1264,
+            "num_turns": 1,
+            "terminal_reason": "completed",
+            "result_index": 2,
+            "queued_turn_count": 0
+          },
+          "sessionIds": [
+            "0539c7fa-fbd5-40a9-9f79-246d7606a08f"
+          ],
+          "sequence": [
+            "system:init",
+            "system:status",
+            "se:message_start",
+            "se:content_block_start:thinking",
+            "se:content_block_delta:thinking_delta",
+            "se:content_block_delta:signature_delta",
+            "assistant:thinking",
+            "se:content_block_stop",
+            "se:content_block_start:text",
+            "se:content_block_delta:text_delta",
+            "assistant:text",
+            "se:content_block_stop",
+            "se:message_delta",
+            "se:message_stop",
+            "result:success"
+          ]
+        }
+      ],
+      "texts": [
+        "ONE",
+        "TWO",
+        "THREE"
+      ],
+      "stderr": "",
+      "stdinCloseToExit": 467,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ]
+}

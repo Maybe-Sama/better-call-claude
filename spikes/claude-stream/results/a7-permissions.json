@@ -1,0 +1,1145 @@
+{
+  "name": "a7-permissions",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:16:55.751Z",
+  "modes": [
+    {
+      "flag": "default",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [],
+      "result": "OK",
+      "stderr": "",
+      "exit": null
+    },
+    {
+      "flag": "manual",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [],
+      "result": "OK",
+      "stderr": "",
+      "exit": null
+    },
+    {
+      "flag": "auto",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [],
+      "result": "OK",
+      "stderr": "",
+      "exit": null
+    }
+  ],
+  "allow": [
+    {
+      "case": "allow",
+      "rep": 0,
+      "permissionMode": "default",
+      "permissionPromptTool": "stdio",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ExitPlanMode"
+      ],
+      "requests": [
+        {
+          "t": 5819.5,
+          "subtype": "can_use_tool",
+          "tool_name": "Bash",
+          "input": {
+            "command": "touch perm-allow-1793643353739-0.txt",
+            "description": "Create an empty file with the specified name"
+          },
+          "keys": [
+            "subtype",
+            "tool_name",
+            "display_name",
+            "input",
+            "description",
+            "permission_suggestions",
+            "blocked_path",
+            "tool_use_id"
+          ],
+          "topKeys": [
+            "type",
+            "request_id",
+            "request"
+          ],
+          "permission_suggestions": [
+            {
+              "type": "addRules",
+              "rules": [
+                {
+                  "toolName": "Bash",
+                  "ruleContent": "touch perm-allow-1793643353739-0.txt"
+                }
+              ],
+              "behavior": "allow",
+              "destination": "localSettings"
+            },
+            {
+              "type": "addDirectories",
+              "directories": [
+                "E:\\tmp\\claude-stream-spike"
+              ],
+              "destination": "session"
+            },
+            {
+              "type": "setMode",
+              "mode": "acceptEdits",
+              "destination": "session"
+            }
+          ]
+        }
+      ],
+      "responsesWritten": [
+        {
+          "type": "control_response",
+          "response": {
+            "subtype": "success",
+            "request_id": "6c3dc3d7-17ec-441e-aa7b-8f16cfc417f7",
+            "response": {
+              "behavior": "allow",
+              "updatedInput": {
+                "command": "touch perm-allow-1793643353739-0.txt",
+                "description": "Create an empty file with the specified name"
+              }
+            }
+          }
+        }
+      ],
+      "fileCreated": true,
+      "toolResult": {
+        "content": "\"(Bash completed with no output)\"",
+        "is_error": false
+      },
+      "result": {
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "text": "DONE",
+        "permission_denials": [],
+        "t": 8410.2
+      },
+      "timeline": [
+        {
+          "t": 1237.7,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1237.8,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1359.2,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 1394.5,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 5711.2,
+          "src": "stream",
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 5771,
+          "src": "probe-hook",
+          "what": "PreToolUse:Bash"
+        },
+        {
+          "t": 5783.1,
+          "src": "stream",
+          "what": "hook_response:PreToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5819.5,
+          "src": "stream",
+          "what": "control_request:can_use_tool"
+        },
+        {
+          "t": 5821.2,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 5821.2,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 5878,
+          "src": "probe-hook",
+          "what": "PermissionRequest:Bash"
+        },
+        {
+          "t": 5888.9,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5922.5,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 6950,
+          "src": "stream",
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 7024,
+          "src": "stream",
+          "what": "hook_response:PostToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 7027.8,
+          "src": "stream",
+          "what": "tool_result"
+        },
+        {
+          "t": 8197.7,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 8197.8,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 8274.1,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        },
+        {
+          "t": 8415.3,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "case": "allow",
+      "rep": 1,
+      "permissionMode": "default",
+      "permissionPromptTool": "stdio",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ExitPlanMode"
+      ],
+      "requests": [
+        {
+          "t": 5227.9,
+          "subtype": "can_use_tool",
+          "tool_name": "Bash",
+          "input": {
+            "command": "touch perm-allow-1793643362674-1.txt",
+            "description": "Create permission allow file"
+          },
+          "keys": [
+            "subtype",
+            "tool_name",
+            "display_name",
+            "input",
+            "description",
+            "permission_suggestions",
+            "blocked_path",
+            "tool_use_id"
+          ],
+          "topKeys": [
+            "type",
+            "request_id",
+            "request"
+          ],
+          "permission_suggestions": [
+            {
+              "type": "addRules",
+              "rules": [
+                {
+                  "toolName": "Bash",
+                  "ruleContent": "touch perm-allow-1793643362674-1.txt"
+                }
+              ],
+              "behavior": "allow",
+              "destination": "localSettings"
+            },
+            {
+              "type": "addDirectories",
+              "directories": [
+                "E:\\tmp\\claude-stream-spike"
+              ],
+              "destination": "session"
+            },
+            {
+              "type": "setMode",
+              "mode": "acceptEdits",
+              "destination": "session"
+            }
+          ]
+        }
+      ],
+      "responsesWritten": [
+        {
+          "type": "control_response",
+          "response": {
+            "subtype": "success",
+            "request_id": "bc5afc48-afa4-42d1-ac84-14a76e17fd31",
+            "response": {
+              "behavior": "allow",
+              "updatedInput": {
+                "command": "touch perm-allow-1793643362674-1.txt",
+                "description": "Create permission allow file"
+              }
+            }
+          }
+        }
+      ],
+      "fileCreated": true,
+      "toolResult": {
+        "content": "\"(Bash completed with no output)\"",
+        "is_error": false
+      },
+      "result": {
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "text": "DONE",
+        "permission_denials": [],
+        "t": 8311.2
+      },
+      "timeline": [
+        {
+          "t": 1282.6,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1282.7,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1397.1,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 1431.5,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 5128,
+          "src": "stream",
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 5182,
+          "src": "probe-hook",
+          "what": "PreToolUse:Bash"
+        },
+        {
+          "t": 5193,
+          "src": "stream",
+          "what": "hook_response:PreToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5227.9,
+          "src": "stream",
+          "what": "control_request:can_use_tool"
+        },
+        {
+          "t": 5229.1,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 5229.1,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 5292,
+          "src": "probe-hook",
+          "what": "PermissionRequest:Bash"
+        },
+        {
+          "t": 5305.2,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5352.6,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 6500.7,
+          "src": "stream",
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 6580.8,
+          "src": "stream",
+          "what": "hook_response:PostToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 6586.9,
+          "src": "stream",
+          "what": "tool_result"
+        },
+        {
+          "t": 8059.8,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 8059.9,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 8172.1,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        },
+        {
+          "t": 8312.5,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        }
+      ],
+      "stderr": ""
+    }
+  ],
+  "deny": [
+    {
+      "case": "deny",
+      "rep": 0,
+      "permissionMode": "default",
+      "permissionPromptTool": "stdio",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ExitPlanMode"
+      ],
+      "requests": [
+        {
+          "t": 3647.3,
+          "subtype": "can_use_tool",
+          "tool_name": "Bash",
+          "input": {
+            "command": "touch perm-deny-1793643371492-0.txt",
+            "description": "Create a new empty file with the specified name"
+          },
+          "keys": [
+            "subtype",
+            "tool_name",
+            "display_name",
+            "input",
+            "description",
+            "permission_suggestions",
+            "blocked_path",
+            "tool_use_id"
+          ],
+          "topKeys": [
+            "type",
+            "request_id",
+            "request"
+          ],
+          "permission_suggestions": [
+            {
+              "type": "addRules",
+              "rules": [
+                {
+                  "toolName": "Bash",
+                  "ruleContent": "touch perm-deny-1793643371492-0.txt"
+                }
+              ],
+              "behavior": "allow",
+              "destination": "localSettings"
+            },
+            {
+              "type": "addDirectories",
+              "directories": [
+                "E:\\tmp\\claude-stream-spike"
+              ],
+              "destination": "session"
+            },
+            {
+              "type": "setMode",
+              "mode": "acceptEdits",
+              "destination": "session"
+            }
+          ]
+        }
+      ],
+      "responsesWritten": [
+        {
+          "type": "control_response",
+          "response": {
+            "subtype": "success",
+            "request_id": "0bb0caf9-7662-43b2-aaaa-3b4ca6943a2c",
+            "response": {
+              "behavior": "deny",
+              "message": "The user declined this by voice. Do not retry the command. Reply exactly: DENIED-OK"
+            }
+          }
+        }
+      ],
+      "fileCreated": false,
+      "toolResult": {
+        "content": "\"The user declined this by voice. Do not retry the command. Reply exactly: DENIED-OK\"",
+        "is_error": true
+      },
+      "result": {
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "text": "DENIED-OK",
+        "permission_denials": [
+          {
+            "tool_name": "Bash",
+            "tool_use_id": "toolu_01MAAL3s6YFAr3RDGmWeB61V",
+            "tool_input": {
+              "command": "touch perm-deny-1793643371492-0.txt",
+              "description": "Create a new empty file with the specified name"
+            }
+          }
+        ],
+        "t": 5341.5
+      },
+      "timeline": [
+        {
+          "t": 1274.9,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1275,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1406.1,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 1435.2,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 3521.2,
+          "src": "stream",
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 3588,
+          "src": "probe-hook",
+          "what": "PreToolUse:Bash"
+        },
+        {
+          "t": 3608.3,
+          "src": "stream",
+          "what": "hook_response:PreToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 3647.3,
+          "src": "stream",
+          "what": "control_request:can_use_tool"
+        },
+        {
+          "t": 3649.2,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 3649.2,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 3664.3,
+          "src": "stream",
+          "what": "tool_result"
+        },
+        {
+          "t": 3709,
+          "src": "probe-hook",
+          "what": "PermissionRequest:Bash"
+        },
+        {
+          "t": 3723.8,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 3783,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5138.6,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 5138.8,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 5217.3,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        },
+        {
+          "t": 5346.3,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "case": "deny",
+      "rep": 1,
+      "permissionMode": "default",
+      "permissionPromptTool": "stdio",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ExitPlanMode"
+      ],
+      "requests": [
+        {
+          "t": 5793,
+          "subtype": "can_use_tool",
+          "tool_name": "Bash",
+          "input": {
+            "command": "touch perm-deny-1793643377663-1.txt",
+            "description": "Create a file named perm-deny-1793643377663-1.txt"
+          },
+          "keys": [
+            "subtype",
+            "tool_name",
+            "display_name",
+            "input",
+            "description",
+            "permission_suggestions",
+            "blocked_path",
+            "tool_use_id"
+          ],
+          "topKeys": [
+            "type",
+            "request_id",
+            "request"
+          ],
+          "permission_suggestions": [
+            {
+              "type": "addRules",
+              "rules": [
+                {
+                  "toolName": "Bash",
+                  "ruleContent": "touch perm-deny-1793643377663-1.txt"
+                }
+              ],
+              "behavior": "allow",
+              "destination": "localSettings"
+            },
+            {
+              "type": "addDirectories",
+              "directories": [
+                "E:\\tmp\\claude-stream-spike"
+              ],
+              "destination": "session"
+            },
+            {
+              "type": "setMode",
+              "mode": "acceptEdits",
+              "destination": "session"
+            }
+          ]
+        }
+      ],
+      "responsesWritten": [
+        {
+          "type": "control_response",
+          "response": {
+            "subtype": "success",
+            "request_id": "dbb3c52a-ca6c-47c9-a773-e7abe78858ec",
+            "response": {
+              "behavior": "deny",
+              "message": "The user declined this by voice. Do not retry the command. Reply exactly: DENIED-OK"
+            }
+          }
+        }
+      ],
+      "fileCreated": false,
+      "toolResult": {
+        "content": "\"The user declined this by voice. Do not retry the command. Reply exactly: DENIED-OK\"",
+        "is_error": true
+      },
+      "result": {
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "text": "DENIED-OK",
+        "permission_denials": [
+          {
+            "tool_name": "Bash",
+            "tool_use_id": "toolu_01GsRMf8tq6e4qTa7v6GUzwS",
+            "tool_input": {
+              "command": "touch perm-deny-1793643377663-1.txt",
+              "description": "Create a file named perm-deny-1793643377663-1.txt"
+            }
+          }
+        ],
+        "t": 7596.8
+      },
+      "timeline": [
+        {
+          "t": 1526.7,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1526.8,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1656.9,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 1706.6,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 5663.7,
+          "src": "stream",
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 5737,
+          "src": "probe-hook",
+          "what": "PreToolUse:Bash"
+        },
+        {
+          "t": 5748.9,
+          "src": "stream",
+          "what": "hook_response:PreToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5793,
+          "src": "stream",
+          "what": "control_request:can_use_tool"
+        },
+        {
+          "t": 5794.7,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 5794.8,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 5813,
+          "src": "stream",
+          "what": "tool_result"
+        },
+        {
+          "t": 5865,
+          "src": "probe-hook",
+          "what": "PermissionRequest:Bash"
+        },
+        {
+          "t": 5876.4,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 5933,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 7354.9,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7355,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7442.9,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        },
+        {
+          "t": 7592.1,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        }
+      ],
+      "stderr": ""
+    }
+  ],
+  "denyInterrupt": [
+    {
+      "case": "deny-interrupt",
+      "rep": 0,
+      "permissionMode": "default",
+      "permissionPromptTool": "stdio",
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ExitPlanMode"
+      ],
+      "requests": [
+        {
+          "t": 4481.4,
+          "subtype": "can_use_tool",
+          "tool_name": "Bash",
+          "input": {
+            "command": "touch perm-deny-interrupt-1793643385792-0.txt",
+            "description": "Create a permission deny interrupt file"
+          },
+          "keys": [
+            "subtype",
+            "tool_name",
+            "display_name",
+            "input",
+            "description",
+            "permission_suggestions",
+            "blocked_path",
+            "tool_use_id"
+          ],
+          "topKeys": [
+            "type",
+            "request_id",
+            "request"
+          ],
+          "permission_suggestions": [
+            {
+              "type": "addRules",
+              "rules": [
+                {
+                  "toolName": "Bash",
+                  "ruleContent": "touch perm-deny-interrupt-1793643385792-0.txt"
+                }
+              ],
+              "behavior": "allow",
+              "destination": "localSettings"
+            },
+            {
+              "type": "addDirectories",
+              "directories": [
+                "E:\\tmp\\claude-stream-spike"
+              ],
+              "destination": "session"
+            },
+            {
+              "type": "setMode",
+              "mode": "acceptEdits",
+              "destination": "session"
+            }
+          ]
+        }
+      ],
+      "responsesWritten": [
+        {
+          "type": "control_response",
+          "response": {
+            "subtype": "success",
+            "request_id": "05d7f466-f3c8-48ba-9ac1-164ac886cb94",
+            "response": {
+              "behavior": "deny",
+              "message": "The user stopped this by voice.",
+              "interrupt": true
+            }
+          }
+        }
+      ],
+      "fileCreated": false,
+      "toolResult": {
+        "content": "\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user t",
+        "is_error": true
+      },
+      "result": {
+        "subtype": "error_during_execution",
+        "terminal_reason": "aborted_tools",
+        "text": "undefined",
+        "permission_denials": [
+          {
+            "tool_name": "Bash",
+            "tool_use_id": "toolu_01WsnbMYNCXodRdCXDJLnXWq",
+            "tool_input": {
+              "command": "touch perm-deny-interrupt-1793643385792-0.txt",
+              "description": "Create a permission deny interrupt file"
+            }
+          }
+        ],
+        "t": 4520
+      },
+      "timeline": [
+        {
+          "t": 1163.3,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1163.4,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1270.9,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 1313.9,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 4318.6,
+          "src": "stream",
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 4435,
+          "src": "probe-hook",
+          "what": "PreToolUse:Bash"
+        },
+        {
+          "t": 4447.1,
+          "src": "stream",
+          "what": "hook_response:PreToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 4481.4,
+          "src": "stream",
+          "what": "control_request:can_use_tool"
+        },
+        {
+          "t": 4482.7,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 4482.8,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 4515.2,
+          "src": "stream",
+          "what": "tool_result"
+        },
+        {
+          "t": 4520.8,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "cancelled"
+        }
+      ],
+      "stderr": ""
+    }
+  ],
+  "none": [
+    {
+      "case": "none",
+      "rep": 0,
+      "permissionMode": "default",
+      "permissionPromptTool": null,
+      "initPermissionMode": "default",
+      "interactiveToolsInInit": [],
+      "requests": [],
+      "responsesWritten": [],
+      "fileCreated": false,
+      "toolResult": {
+        "content": "\"touch in 'E:\\\\tmp\\\\claude-stream-spike\\\\perm-none-1793643392521-0.txt' needs approval. The path is inside the working directories for this session ('E:\\\\tmp\\\\claude-stream-spike', 'E:\\\\CODE_feliz\\\\AA",
+        "is_error": true
+      },
+      "result": {
+        "subtype": "success",
+        "terminal_reason": "completed",
+        "text": "El comando requiere aprobación. El sistema solicita permiso antes de crear archivos en los directorios de trabajo de est",
+        "permission_denials": [
+          {
+            "tool_name": "Bash",
+            "tool_use_id": "toolu_017LHFkcQ1ooPYxRXa7aabHh",
+            "tool_input": {
+              "command": "touch perm-none-1793643392521-0.txt",
+              "description": "Create empty file with specified name"
+            }
+          }
+        ],
+        "t": 7898.9
+      },
+      "timeline": [
+        {
+          "t": 1356.3,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1356.4,
+          "src": "stream",
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1498.6,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 1552.5,
+          "src": "stream",
+          "what": "hook_response:UserPromptSubmit",
+          "outcome": "success"
+        },
+        {
+          "t": 3982.6,
+          "src": "stream",
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 4048,
+          "src": "probe-hook",
+          "what": "PreToolUse:Bash"
+        },
+        {
+          "t": 4060.4,
+          "src": "stream",
+          "what": "hook_response:PreToolUse:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 4101.4,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 4101.5,
+          "src": "stream",
+          "what": "hook_started:PermissionRequest:Bash"
+        },
+        {
+          "t": 4166,
+          "src": "probe-hook",
+          "what": "PermissionRequest:Bash"
+        },
+        {
+          "t": 4178.2,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 4198.4,
+          "src": "stream",
+          "what": "hook_response:PermissionRequest:Bash",
+          "outcome": "success"
+        },
+        {
+          "t": 4203.7,
+          "src": "stream",
+          "what": "tool_result"
+        },
+        {
+          "t": 7663.8,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7663.8,
+          "src": "stream",
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7746.3,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        },
+        {
+          "t": 7900.1,
+          "src": "stream",
+          "what": "hook_response:Stop",
+          "outcome": "success"
+        }
+      ],
+      "stderr": ""
+    }
+  ],
+  "oneshot": {
+    "exit": 0,
+    "fileCreated": false,
+    "result": "DONE.",
+    "permission_denials": [
+      {
+        "tool_name": "Bash",
+        "tool_use_id": "toolu_01UrkY8NkGnq4sBmPw6QFkS6",
+        "tool_input": {
+          "command": "touch perm-oneshot-1793643400971.txt",
+          "description": "Create a file named perm-oneshot-1793643400971.txt"
+        }
+      }
+    ],
+    "terminal_reason": "completed",
+    "stderr": ""
+  }
+}

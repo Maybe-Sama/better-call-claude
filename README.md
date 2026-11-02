@@ -121,6 +121,8 @@ Opcional, en `%LOCALAPPDATA%\AgentCall\config.json`. Reinicia AgentCall tras cam
 | `vocab` | Palabras que deberían entenderse bien: nombres de proyectos, librerías… |
 | `defaultMode` | `on` para que **todas** las sesiones llamen sin `/saul on`. |
 | `minResultSeconds` | Duración mínima de un turno para llamarte al terminar (por defecto 20 s). |
+| `capture` | `aec`: el micrófono pasa por la cancelación de eco de Chromium, así puedes interrumpir a Claude al instante aunque uses altavoces. `device` (por defecto): Whisper abre el micrófono directamente. |
+| `voiceMetrics` | `true` guarda en `voice-metrics.jsonl` las latencias de la voz (solo tiempos, nunca lo que se dice). Ctrl+Mayús+L en la llamada las muestra en vivo. |
 
 ## Problemas frecuentes
 
@@ -161,6 +163,8 @@ npm test                                                               # tests d
 | `src/main.js` | App Electron, servidor de hooks, procesos de voz. |
 | `src/renderer/` | Interfaz de la llamada. |
 | `src/speech/` | Workers de Whisper (CPU/GPU) y voz (Edge/Kokoro). |
+| `src/voice/` | Conversación por voz: turnos, fin de turno, métricas (ver `docs/voice-first/`). |
+| `scripts/voice-lab.js` | Laboratorio de voz: `npm run voice-lab -- fixtures` · `stt` · `tts`. |
 | `claude-plugin/` | Plugin de Claude Code (hooks). |
 | `claude-commands/saul.md` | Comando `/saul`. |
 | `docs/` | [Especificación](docs/SYSTEM_SPEC.md), [contrato de hooks](docs/HOOK_CONTRACT.md) y [plan de pruebas](docs/TEST_PLAN.md). |

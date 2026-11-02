@@ -1,0 +1,1002 @@
+{
+  "name": "a4-interrupt",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:12:12.625Z",
+  "summary": {
+    "text": {
+      "reps": 10,
+      "toControlResponse": {
+        "n": 10,
+        "median": 1,
+        "min": 0.9,
+        "max": 1.5
+      },
+      "toResult": {
+        "n": 10,
+        "median": 5.3,
+        "min": 5,
+        "max": 22.6
+      },
+      "toLastStreamEvent": {
+        "n": 0,
+        "median": null,
+        "min": null,
+        "max": null
+      },
+      "resultKinds": {
+        "error_during_execution/aborted_streaming": 10
+      },
+      "usableAfter": 10,
+      "awareness": "YES\n\nUna lista de doscientos animales diferentes numerados."
+    },
+    "race": {
+      "reps": 10,
+      "toControlResponse": {
+        "n": 10,
+        "median": 14.8,
+        "min": 1.1,
+        "max": 204.6
+      },
+      "toResult": {
+        "n": 10,
+        "median": 74.5,
+        "min": -0.2,
+        "max": 240.1
+      },
+      "toLastStreamEvent": {
+        "n": 0,
+        "median": null,
+        "min": null,
+        "max": null
+      },
+      "resultKinds": {
+        "error_during_execution/aborted_streaming": 9,
+        "success/completed": 1
+      },
+      "usableAfter": 10
+    },
+    "cold": {
+      "reps": 3,
+      "toControlResponse": {
+        "n": 3,
+        "median": 1219.1,
+        "min": 1217.3,
+        "max": 1285.9
+      },
+      "toResult": {
+        "n": 3,
+        "median": 1421.6,
+        "min": 1410.2,
+        "max": 1460.3
+      },
+      "toLastStreamEvent": {
+        "n": 0,
+        "median": null,
+        "min": null,
+        "max": null
+      },
+      "resultKinds": {
+        "error_during_execution/aborted_streaming": 3
+      },
+      "usableAfter": 3
+    },
+    "idle": {
+      "reps": 2,
+      "toControlResponse": {
+        "n": 2,
+        "median": 4.6,
+        "min": 1.6,
+        "max": 7.6
+      },
+      "toResult": {
+        "n": 0,
+        "median": null,
+        "min": null,
+        "max": null
+      },
+      "toLastStreamEvent": {
+        "n": 0,
+        "median": null,
+        "min": null,
+        "max": null
+      },
+      "resultKinds": {
+        "n/a": 2
+      },
+      "usableAfter": 2
+    }
+  },
+  "text": {
+    "runs": [
+      {
+        "toControlResponse": 1.5,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_nxh0l0",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 9,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "3 assistant:text",
+          "5 user:text",
+          "9 result:error_during_execution"
+        ],
+        "resIdx": 44,
+        "rep": 0,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 1.2,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_2_6of0y3",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 6.1,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "6 result:error_during_execution"
+        ],
+        "resIdx": 81,
+        "rep": 1,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_3_hpnko7",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 15.4,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "3 assistant:text",
+          "4 user:text",
+          "15 result:error_during_execution"
+        ],
+        "resIdx": 118,
+        "rep": 2,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_4_4w809z",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5.1,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 155,
+        "rep": 3,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 0.9,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_5_kwqnv0",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5.3,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 192,
+        "rep": 4,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 0.9,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_6_4o9bv8",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 229,
+        "rep": 5,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_7_f1eryw",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5.2,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 266,
+        "rep": 6,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 1.2,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_8_xlsq4i",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5.4,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 303,
+        "rep": 7,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_9_ga2f2b",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 22.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "23 result:error_during_execution"
+        ],
+        "resIdx": 340,
+        "rep": 8,
+        "firstDeltaFound": true
+      },
+      {
+        "toControlResponse": 0.9,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_10_3fxg96",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "2 assistant:text",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 377,
+        "rep": 9,
+        "firstDeltaFound": true
+      }
+    ],
+    "awareness": {
+      "text": "YES\n\nUna lista de doscientos animales diferentes numerados.",
+      "subtype": "success",
+      "terminal_reason": "completed",
+      "toResult": 2785.3
+    }
+  },
+  "bash": {
+    "invalid": "first bash run: --allowedTools Bash(sleep *) did not cover the > marker redirection, every command needed approval and the turn ended before the interrupt; re-run in a4-interrupt-bash.json"
+  },
+  "race": {
+    "runs": [
+      {
+        "toControlResponse": 50.2,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_l2mlhy",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 219.1,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "50 control_response:success",
+          "186 system:init",
+          "189 system:status",
+          "211 user:text",
+          "219 result:error_during_execution"
+        ],
+        "resIdx": 31,
+        "rep": 0,
+        "delay": 0,
+        "writeToInterrupt": 6.8,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG0",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1472.7
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 23.2,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_2_lmvhwv",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 187.8,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "23 control_response:success",
+          "158 system:init",
+          "159 system:status",
+          "174 user:text",
+          "188 result:error_during_execution"
+        ],
+        "resIdx": 51,
+        "rep": 1,
+        "delay": 0,
+        "writeToInterrupt": 7.4,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG1",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1147.5
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 23.8,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_3_eid6ua",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 122.4,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "24 control_response:success",
+          "104 system:init",
+          "105 system:status",
+          "120 user:text",
+          "122 result:error_during_execution"
+        ],
+        "resIdx": 72,
+        "rep": 2,
+        "delay": 50,
+        "writeToInterrupt": 52.2,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG2",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1154.5
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 14.8,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_4_vkktlc",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 124.8,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "15 control_response:success",
+          "109 system:init",
+          "110 system:status",
+          "122 user:text",
+          "125 result:error_during_execution"
+        ],
+        "resIdx": 92,
+        "rep": 3,
+        "delay": 50,
+        "writeToInterrupt": 61.7,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG3",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1156.1
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 7.8,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_5_xs96xf",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 11.5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "8 control_response:success",
+          "10 user:text",
+          "11 result:error_during_execution"
+        ],
+        "resIdx": 112,
+        "rep": 4,
+        "delay": 150,
+        "writeToInterrupt": 151.9,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG4",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1118.8
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 14.7,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_6_ykrmov",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 26.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "15 control_response:success",
+          "17 user:text",
+          "27 result:error_during_execution"
+        ],
+        "resIdx": 132,
+        "rep": 5,
+        "delay": 150,
+        "writeToInterrupt": 149.8,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG5",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1219.7
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 204.6,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_7_7jah6w",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 240.1,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "205 control_response:success",
+          "219 system:init",
+          "220 system:status",
+          "237 user:text",
+          "240 result:error_during_execution"
+        ],
+        "resIdx": 152,
+        "rep": 6,
+        "delay": 400,
+        "writeToInterrupt": 415,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG6",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1198.1
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 1.2,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_8_1qt7de",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success",
+          "3 user:text",
+          "5 result:error_during_execution"
+        ],
+        "resIdx": 172,
+        "rep": 7,
+        "delay": 400,
+        "writeToInterrupt": 406.6,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG7",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1454.4
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 1.5,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_9_c86kpp",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 6.5,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "2 control_response:success",
+          "4 user:text",
+          "7 result:error_during_execution"
+        ],
+        "resIdx": 196,
+        "rep": 8,
+        "delay": 1000,
+        "writeToInterrupt": 1009.9,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG8",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1066.6
+        },
+        "usable": true
+      },
+      {
+        "toControlResponse": 1.1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_10_pfvyyr",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": -0.2,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "success",
+          "is_error": false,
+          "terminal_reason": "completed",
+          "stop_reason": "end_turn",
+          "num_turns": 1,
+          "text": "PING9"
+        },
+        "labelsAfterInterrupt": [
+          "1 control_response:success"
+        ],
+        "resIdx": 226,
+        "rep": 9,
+        "delay": 1000,
+        "writeToInterrupt": 1002.9,
+        "extraResultWithin3s": null,
+        "next": {
+          "text": "PONG9",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 990
+        },
+        "usable": true
+      }
+    ]
+  },
+  "cold": {
+    "runs": [
+      {
+        "toControlResponse": 1285.9,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_0lyu39",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 1460.3,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1167 system:hook_started",
+          "1167 system:hook_started",
+          "1168 system:hook_started",
+          "1168 system:hook_response",
+          "1168 system:hook_response",
+          "1252 system:hook_response",
+          "1286 control_response:success",
+          "1352 system:init",
+          "1357 system:status",
+          "1393 user:text",
+          "1460 result:error_during_execution"
+        ],
+        "resIdx": 10,
+        "rep": 0,
+        "writeToInterrupt": 0.1,
+        "next": {
+          "text": "SECOND",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 3175.7
+        },
+        "usable": true,
+        "resultsSeen": [
+          "error_during_execution/aborted_streaming/undefined",
+          "success/completed/SECOND"
+        ]
+      },
+      {
+        "toControlResponse": 1219.1,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_td8iv9",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 1410.2,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1180 system:hook_started",
+          "1180 system:hook_started",
+          "1180 system:hook_started",
+          "1180 system:hook_response",
+          "1180 system:hook_response",
+          "1180 system:hook_response",
+          "1219 control_response:success",
+          "1306 system:init",
+          "1311 system:status",
+          "1358 user:text",
+          "1410 result:error_during_execution"
+        ],
+        "resIdx": 10,
+        "rep": 1,
+        "writeToInterrupt": 0.1,
+        "next": {
+          "text": "SECOND",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 4800.7
+        },
+        "usable": true,
+        "resultsSeen": [
+          "error_during_execution/aborted_streaming/undefined",
+          "success/completed/SECOND"
+        ]
+      },
+      {
+        "toControlResponse": 1217.3,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_79bukm",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "toResult": 1421.6,
+        "toLastStreamEvent": null,
+        "textDeltasAfterInterrupt": 0,
+        "result": {
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "terminal_reason": "aborted_streaming",
+          "stop_reason": null,
+          "num_turns": 2,
+          "text": ""
+        },
+        "labelsAfterInterrupt": [
+          "1129 system:hook_started",
+          "1129 system:hook_started",
+          "1129 system:hook_started",
+          "1129 system:hook_response",
+          "1129 system:hook_response",
+          "1134 system:hook_response",
+          "1217 control_response:success",
+          "1309 system:init",
+          "1315 system:status",
+          "1360 user:text",
+          "1422 result:error_during_execution"
+        ],
+        "resIdx": 10,
+        "rep": 2,
+        "writeToInterrupt": 0.1,
+        "next": {
+          "text": "SECOND",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 6219.8
+        },
+        "usable": true,
+        "resultsSeen": [
+          "error_during_execution/aborted_streaming/undefined",
+          "success/completed/SECOND"
+        ]
+      }
+    ]
+  },
+  "idle": {
+    "runs": [
+      {
+        "rep": 0,
+        "toControlResponse": 7.6,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_1_pyf7cd",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "next": {
+          "text": "IDLE0",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 2163.3
+        },
+        "usable": true
+      },
+      {
+        "rep": 1,
+        "toControlResponse": 1.6,
+        "controlResponse": {
+          "subtype": "success",
+          "request_id": "req_2_zbx4hm",
+          "response": {
+            "still_queued": []
+          }
+        },
+        "next": {
+          "text": "IDLE1",
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "toResult": 1188.1
+        },
+        "usable": true
+      }
+    ]
+  }
+}

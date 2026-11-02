@@ -1,0 +1,304 @@
+{
+  "name": "a6-equivalence",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:20:01.450Z",
+  "config": {
+    "enabledPlugins": [
+      "superpowers@claude-plugins-official",
+      "agentcall@better-call-claude"
+    ],
+    "settingsModel": "opus",
+    "settingsDefaultMode": "auto",
+    "userHookEvents": [
+      "UserPromptSubmit",
+      "SessionStart",
+      "PostToolUse",
+      "Stop"
+    ],
+    "userMcpServers": [
+      "pencil",
+      "filesystem",
+      "memory",
+      "playwright"
+    ],
+    "userSkillDirs": [
+      "agent-browser",
+      "animate",
+      "animation-vocabulary",
+      "apple-design",
+      "banner-design",
+      "brand",
+      "codex-review",
+      "codex-review.bak-2026-11-02",
+      "design",
+      "design-system",
+      "design-toolkit-orchestrator",
+      "emil-design-eng",
+      "find-animation-opportunities",
+      "find-skills",
+      "impeccable",
+      "improve-animations",
+      "mcp-builder",
+      "review-animations",
+      "skillui-design-extractor",
+      "slides",
+      "ui-styling",
+      "ui-ux-pro-max"
+    ]
+  },
+  "stream": {
+    "model": "claude-opus-5-5",
+    "permissionMode": "auto",
+    "cwd": "E:\\tmp\\claude-stream-spike",
+    "output_style": "default",
+    "apiKeySource": "none",
+    "builtinTools": [
+      "Task",
+      "Bash",
+      "CronCreate",
+      "CronDelete",
+      "CronList",
+      "DesignSync",
+      "Edit",
+      "EnterWorktree",
+      "ExitWorktree",
+      "Glob",
+      "Grep",
+      "ListAgents",
+      "ListMcpResourcesTool",
+      "Monitor",
+      "NotebookEdit",
+      "PowerShell",
+      "PushNotification",
+      "Read",
+      "ReadMcpResourceDirTool",
+      "ReadMcpResourceTool",
+      "RemoteTrigger",
+      "ReportFindings",
+      "ScheduleWakeup",
+      "SendMessage",
+      "Skill",
+      "TaskStop",
+      "ToolSearch",
+      "WebFetch",
+      "WebSearch",
+      "Workflow",
+      "Write"
+    ],
+    "mcpToolCount": 26,
+    "mcp_servers": [
+      {
+        "name": "pencil",
+        "status": "connected",
+        "source": "user"
+      },
+      {
+        "name": "filesystem",
+        "status": "pending",
+        "source": "user"
+      },
+      {
+        "name": "memory",
+        "status": "pending",
+        "source": "user"
+      },
+      {
+        "name": "playwright",
+        "status": "pending",
+        "source": "user"
+      },
+      {
+        "name": "claude.ai Claude Docs",
+        "status": "pending",
+        "source": "claudeai"
+      },
+      {
+        "name": "claude.ai Canva",
+        "status": "pending",
+        "source": "claudeai"
+      },
+      {
+        "name": "claude.ai Google Calendar",
+        "status": "needs-auth",
+        "source": "claudeai"
+      },
+      {
+        "name": "claude.ai Google Drive",
+        "status": "connected",
+        "source": "claudeai"
+      },
+      {
+        "name": "claude.ai Gmail",
+        "status": "needs-auth",
+        "source": "claudeai"
+      }
+    ],
+    "plugins": [
+      "superpowers@claude-plugins-official",
+      "agentcall@better-call-claude",
+      "cowork-plugin-management@synced",
+      "cc-plugin-agents-md@builtin",
+      "cc-plugin-telemetry@builtin",
+      "cc-plugin-plugin-authoring@builtin"
+    ],
+    "skills": [
+      "agent-browser",
+      "animate",
+      "animation-vocabulary",
+      "apple-design",
+      "banner-design",
+      "brand",
+      "codex-review",
+      "codex-review.bak-2026-11-02",
+      "design",
+      "design-system",
+      "design-toolkit-orchestrator",
+      "emil-design-eng",
+      "find-animation-opportunities",
+      "find-skills",
+      "impeccable",
+      "improve-animations",
+      "mcp-builder",
+      "review-animations",
+      "skillui-design-extractor",
+      "slides",
+      "ui-styling",
+      "ui-ux-pro-max",
+      "saul",
+      "deep-research",
+      "superpowers:brainstorming",
+      "superpowers:dispatching-parallel-agents",
+      "superpowers:executing-plans",
+      "superpowers:finishing-a-development-branch",
+      "superpowers:receiving-code-review",
+      "superpowers:requesting-code-review",
+      "superpowers:subagent-driven-development",
+      "superpowers:systematic-debugging",
+      "superpowers:test-driven-development",
+      "superpowers:using-git-worktrees",
+      "superpowers:using-superpowers",
+      "superpowers:verification-before-completion",
+      "superpowers:writing-plans",
+      "superpowers:writing-skills",
+      "agentcall:agentcall",
+      "cowork-plugin-management:cowork-plugin-customizer",
+      "cowork-plugin-management:create-cowork-plugin",
+      "design-sync",
+      "dataviz",
+      "update-config",
+      "verify",
+      "debug",
+      "code-review",
+      "simplify",
+      "batch",
+      "fewer-permission-prompts",
+      "doctor",
+      "loop",
+      "schedule",
+      "claude-api",
+      "workflow-authoring",
+      "run",
+      "run-skill-generator",
+      "plugin-authoring",
+      "anthropic-skills:built-in-browser",
+      "anthropic-skills:chrome-browser",
+      "anthropic-skills:computer-use",
+      "anthropic-skills:deep-research",
+      "anthropic-skills:docs",
+      "anthropic-skills:docx",
+      "anthropic-skills:import-memory",
+      "anthropic-skills:morning",
+      "anthropic-skills:pdf",
+      "anthropic-skills:pptx",
+      "anthropic-skills:skill-creator",
+      "anthropic-skills:xlsx"
+    ],
+    "agents": [
+      "claude",
+      "Explore",
+      "general-purpose",
+      "impeccable-asset-producer",
+      "impeccable-documenter",
+      "impeccable-finish-reviewer",
+      "impeccable-manual-edit-applier",
+      "Plan",
+      "statusline-setup",
+      "superpowers:code-reviewer"
+    ],
+    "slashCommandCount": 109,
+    "terminal_slash_commands": [
+      "doctor",
+      "color",
+      "focus",
+      "reload-plugins"
+    ]
+  },
+  "answer": "PELICAN-42\ncodex-review",
+  "answerTimeMs": 3671,
+  "costUsd": 0.150608,
+  "hooksSeenAtStart": [
+    "SessionStart:startup:success",
+    "SessionStart:startup:success",
+    "SessionStart:startup:success"
+  ],
+  "mcpStatusAfterTurn": [
+    "pencil:connected",
+    "filesystem:connected",
+    "memory:connected",
+    "playwright:connected",
+    "claude.ai Claude Docs:connected",
+    "claude.ai Canva:connected",
+    "claude.ai Google Calendar:needs-auth",
+    "claude.ai Google Drive:connected",
+    "claude.ai Gmail:needs-auth"
+  ],
+  "plainPrint": {
+    "sameBuiltinTools": false,
+    "builtinToolsOnlyInStream": [],
+    "builtinToolsOnlyInPlain": [
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
+      "TaskUpdate"
+    ],
+    "samePlugins": true,
+    "sameSkills": true,
+    "mcpServers": [
+      "pencil",
+      "filesystem",
+      "memory",
+      "playwright",
+      "claude.ai Claude Docs",
+      "claude.ai Canva",
+      "claude.ai Google Calendar",
+      "claude.ai Google Drive",
+      "claude.ai Gmail"
+    ]
+  },
+  "comparison": {
+    "enabledPluginsLoaded": [
+      "superpowers@claude-plugins-official",
+      "agentcall@better-call-claude"
+    ],
+    "enabledPluginsMissing": [],
+    "extraPlugins": [
+      "cowork-plugin-management@synced",
+      "cc-plugin-agents-md@builtin",
+      "cc-plugin-telemetry@builtin",
+      "cc-plugin-plugin-authoring@builtin"
+    ],
+    "userMcpLoaded": [
+      "pencil",
+      "filesystem",
+      "memory",
+      "playwright"
+    ],
+    "userMcpMissing": [],
+    "userSkillsMissing": [],
+    "interactiveOnlyToolsAbsent": [
+      "AskUserQuestion",
+      "EnterPlanMode",
+      "ExitPlanMode"
+    ]
+  }
+}

@@ -1,0 +1,879 @@
+{
+  "name": "b-hooks-b1-b2",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:21:46.636Z",
+  "b1": [
+    {
+      "name": "b1-0",
+      "results": [
+        {
+          "t": 8038,
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "num_turns": 2,
+          "text": "El comando se ejecutó correctamente.\n\n**Salida:**\n```\nhello\n```\n\n**Palabra secreta:** QUASAR-9"
+        }
+      ],
+      "allAssistantText": "El comando se ejecutó correctamente.\n\n**Salida:**\n```\nhello\n```\n\n**Palabra secreta:** QUASAR-9",
+      "toolUses": [
+        "echo hello"
+      ],
+      "toolResults": [
+        {
+          "is_error": false,
+          "content": "\"hello\""
+        }
+      ],
+      "hookResponses": [
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "PostToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Voice message from the user: the secret word is QUASAR-9. Include it in your final rep"
+        },
+        {
+          "name": "PostToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        }
+      ],
+      "probeCalls": 1,
+      "timeline": [
+        {
+          "t": 1253,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1254,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1366,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 1402,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 4005,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 4279,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 5464,
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 5464,
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 5528,
+          "what": "probe:post-context:PostToolUse:Bash"
+        },
+        {
+          "t": 5541,
+          "what": "hook_response:PostToolUse:Bash"
+        },
+        {
+          "t": 5551,
+          "what": "hook_response:PostToolUse:Bash"
+        },
+        {
+          "t": 5556,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 7546,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 7802,
+          "what": "assistant:text \"El comando se ejecutó correctamente.\n\n**Salida:**\n```\nhello\n```\n\n**Pal\""
+        },
+        {
+          "t": 7823,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7823,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7899,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 8039,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 8050,
+          "what": "result:success"
+        }
+      ],
+      "word": "QUASAR-9",
+      "seen": true
+    },
+    {
+      "name": "b1-1",
+      "results": [
+        {
+          "t": 8301,
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "num_turns": 2,
+          "text": "El comando se ejecutó correctamente. Aquí está el resultado:\n\n**Salida del comando:** `hello`\n\n**Palabra secreta:** NEBULA-4"
+        }
+      ],
+      "allAssistantText": "El comando se ejecutó correctamente. Aquí está el resultado:\n\n**Salida del comando:** `hello`\n\n**Palabra secreta:** NEBULA-4",
+      "toolUses": [
+        "echo hello"
+      ],
+      "toolResults": [
+        {
+          "is_error": false,
+          "content": "\"hello\""
+        }
+      ],
+      "hookResponses": [
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "PostToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Voice message from the user: the secret word is NEBULA-4. Include it in your final rep"
+        },
+        {
+          "name": "PostToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        }
+      ],
+      "probeCalls": 1,
+      "timeline": [
+        {
+          "t": 1542,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1542,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1653,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 1701,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 4309,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 4512,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 5765,
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 5766,
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 5846,
+          "what": "probe:post-context:PostToolUse:Bash"
+        },
+        {
+          "t": 5864,
+          "what": "hook_response:PostToolUse:Bash"
+        },
+        {
+          "t": 5879,
+          "what": "hook_response:PostToolUse:Bash"
+        },
+        {
+          "t": 5886,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 7759,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 8059,
+          "what": "assistant:text \"El comando se ejecutó correctamente. Aquí está el resultado:\n\n**Salida\""
+        },
+        {
+          "t": 8079,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 8079,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 8167,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 8309,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 8318,
+          "what": "result:success"
+        }
+      ],
+      "word": "NEBULA-4",
+      "seen": true
+    },
+    {
+      "name": "b1-2",
+      "results": [
+        {
+          "t": 9556,
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "num_turns": 2,
+          "text": "Comando ejecutado exitosamente.\n\n**Resultado:** `hello`\n\n**Palabra secreta:** PULSAR-2"
+        }
+      ],
+      "allAssistantText": "Comando ejecutado exitosamente.\n\n**Resultado:** `hello`\n\n**Palabra secreta:** PULSAR-2",
+      "toolUses": [
+        "echo hello"
+      ],
+      "toolResults": [
+        {
+          "is_error": false,
+          "content": "\"hello\""
+        }
+      ],
+      "hookResponses": [
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "PostToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Voice message from the user: the secret word is PULSAR-2. Include it in your final rep"
+        },
+        {
+          "name": "PostToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        }
+      ],
+      "probeCalls": 1,
+      "timeline": [
+        {
+          "t": 1438,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1438,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1566,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 1623,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 5334,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 5553,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 6772,
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 6772,
+          "what": "hook_started:PostToolUse:Bash"
+        },
+        {
+          "t": 6828,
+          "what": "probe:post-context:PostToolUse:Bash"
+        },
+        {
+          "t": 6843,
+          "what": "hook_response:PostToolUse:Bash"
+        },
+        {
+          "t": 6860,
+          "what": "hook_response:PostToolUse:Bash"
+        },
+        {
+          "t": 6866,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 9092,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 9318,
+          "what": "assistant:text \"Comando ejecutado exitosamente.\n\n**Resultado:** `hello`\n\n**Palabra sec\""
+        },
+        {
+          "t": 9337,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 9337,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 9421,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 9563,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 9572,
+          "what": "result:success"
+        }
+      ],
+      "word": "PULSAR-2",
+      "seen": true
+    }
+  ],
+  "b2": [
+    {
+      "name": "b2-0",
+      "results": [
+        {
+          "t": 7574,
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "num_turns": 3,
+          "text": "El usuario ha interrumpido por voz. ¿Qué te gustaría hacer?"
+        }
+      ],
+      "allAssistantText": "El usuario ha interrumpido por voz. ¿Qué te gustaría hacer?",
+      "toolUses": [
+        "echo one",
+        "echo two"
+      ],
+      "toolResults": [
+        {
+          "is_error": true,
+          "content": "\"PreToolUse:Bash hook error: The user interrupted by voice: stop and ask what they want.\""
+        },
+        {
+          "is_error": true,
+          "content": "\"PreToolUse:Bash hook error: The user interrupted by voice: stop and ask what they want.\""
+        }
+      ],
+      "hookResponses": [
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "PreToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"The user interrupted by voice: stop and ask what the"
+        },
+        {
+          "name": "PreToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"The user interrupted by voice: stop and ask what the"
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        }
+      ],
+      "probeCalls": 2,
+      "timeline": [
+        {
+          "t": 1333,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1333,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1463,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 1514,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 4003,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 4282,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 4287,
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 4345,
+          "what": "probe:pre-deny:PreToolUse:Bash"
+        },
+        {
+          "t": 4358,
+          "what": "hook_response:PreToolUse:Bash"
+        },
+        {
+          "t": 4364,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 4541,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 4545,
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 4613,
+          "what": "probe:pre-deny:PreToolUse:Bash"
+        },
+        {
+          "t": 4625,
+          "what": "hook_response:PreToolUse:Bash"
+        },
+        {
+          "t": 4630,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 7158,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 7310,
+          "what": "assistant:text \"El usuario ha interrumpido por voz. ¿Qué te gustaría hacer?\""
+        },
+        {
+          "t": 7328,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7328,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 7420,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 7577,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 7587,
+          "what": "result:success"
+        }
+      ],
+      "bashAttempts": 2,
+      "asksUser": true
+    },
+    {
+      "name": "b2-1",
+      "results": [
+        {
+          "t": 16527,
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "num_turns": 3,
+          "text": "¡Un momento! Se activó un gancho de interrupción por voz que detuvo la ejecución. El sistema detectó una interrupción y está pidiendo confirmación.\n\n¿Deseas que continúe con los comandos bash (echo on"
+        }
+      ],
+      "allAssistantText": "Ejecutando los dos comandos bash: || ¡Un momento! Se activó un gancho de interrupción por voz que detuvo la ejecución. El sistema detectó una interrupción y está pidiendo confirmación.\n\n¿Deseas que continúe con los comandos bash (echo one, echo two) que solicitaste, o hay algo diferente que necesites?",
+      "toolUses": [
+        "echo one",
+        "echo two"
+      ],
+      "toolResults": [
+        {
+          "is_error": true,
+          "content": "\"PreToolUse:Bash hook error: The user interrupted by voice: stop and ask what they want.\""
+        },
+        {
+          "is_error": true,
+          "content": "\"PreToolUse:Bash hook error: The user interrupted by voice: stop and ask what they want.\""
+        }
+      ],
+      "hookResponses": [
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "PreToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"The user interrupted by voice: stop and ask what the"
+        },
+        {
+          "name": "PreToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"The user interrupted by voice: stop and ask what the"
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        }
+      ],
+      "probeCalls": 2,
+      "timeline": [
+        {
+          "t": 1355,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1355,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1476,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 1523,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 11499,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 11682,
+          "what": "assistant:text \"Ejecutando los dos comandos bash:\""
+        },
+        {
+          "t": 11964,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 11968,
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 12029,
+          "what": "probe:pre-deny:PreToolUse:Bash"
+        },
+        {
+          "t": 12044,
+          "what": "hook_response:PreToolUse:Bash"
+        },
+        {
+          "t": 12054,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 12187,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 12192,
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 12248,
+          "what": "probe:pre-deny:PreToolUse:Bash"
+        },
+        {
+          "t": 12259,
+          "what": "hook_response:PreToolUse:Bash"
+        },
+        {
+          "t": 12263,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 15484,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 16203,
+          "what": "assistant:text \"¡Un momento! Se activó un gancho de interrupción por voz que detuvo la\""
+        },
+        {
+          "t": 16226,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 16226,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 16324,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 16529,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 16538,
+          "what": "result:success"
+        }
+      ],
+      "bashAttempts": 2,
+      "asksUser": true
+    },
+    {
+      "name": "b2-2",
+      "results": [
+        {
+          "t": 10071,
+          "subtype": "success",
+          "terminal_reason": "completed",
+          "num_turns": 2,
+          "text": "¿Qué necesitas? El sistema detectó una interrupción por voz. ¿Cómo puedo ayudarte?"
+        }
+      ],
+      "allAssistantText": "¿Qué necesitas? El sistema detectó una interrupción por voz. ¿Cómo puedo ayudarte?",
+      "toolUses": [
+        "echo one"
+      ],
+      "toolResults": [
+        {
+          "is_error": true,
+          "content": "\"PreToolUse:Bash hook error: The user interrupted by voice: stop and ask what they want.\""
+        }
+      ],
+      "hookResponses": [
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "UserPromptSubmit",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "PreToolUse:Bash",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"The user interrupted by voice: stop and ask what the"
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        },
+        {
+          "name": "Stop",
+          "outcome": "success",
+          "exit_code": 0,
+          "output": ""
+        }
+      ],
+      "probeCalls": 1,
+      "timeline": [
+        {
+          "t": 1495,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1496,
+          "what": "hook_started:UserPromptSubmit"
+        },
+        {
+          "t": 1628,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 1660,
+          "what": "hook_response:UserPromptSubmit"
+        },
+        {
+          "t": 6297,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 6590,
+          "what": "assistant:tool_use"
+        },
+        {
+          "t": 6594,
+          "what": "hook_started:PreToolUse:Bash"
+        },
+        {
+          "t": 6653,
+          "what": "probe:pre-deny:PreToolUse:Bash"
+        },
+        {
+          "t": 6670,
+          "what": "hook_response:PreToolUse:Bash"
+        },
+        {
+          "t": 6676,
+          "what": "user:tool_result"
+        },
+        {
+          "t": 9534,
+          "what": "assistant:thinking"
+        },
+        {
+          "t": 9804,
+          "what": "assistant:text \"¿Qué necesitas? El sistema detectó una interrupción por voz. ¿Cómo pue\""
+        },
+        {
+          "t": 9821,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 9821,
+          "what": "hook_started:Stop"
+        },
+        {
+          "t": 9915,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 10078,
+          "what": "hook_response:Stop"
+        },
+        {
+          "t": 10087,
+          "what": "result:success"
+        }
+      ],
+      "bashAttempts": 1,
+      "asksUser": true
+    }
+  ]
+}

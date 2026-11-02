@@ -15,6 +15,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const scenarios = require('./voice-lab/scenarios');
 const { LegacyEndpointer, AdaptiveEndpointer } = require('../src/voice/endpointing');
+const { VoiceConversation } = require('../src/voice/conversation');
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA = path.join(process.env.LOCALAPPDATA || '.', 'AgentCall');
@@ -156,26 +157,42 @@ function analyse(sc, next, events, Policy) {
     return end ? f.t - (end.t - end.silence_ms) : null; // from the true end of that utterance's speech
   });
 
-  // Replay the worker's events through the policy with a discrete-time simulator.
-  const lost = sc.kind === 'working' && Policy === LegacyEndpointer; // legacy paused the mic while Claude worked
+  // Replay the worker's events through the app's VoiceConversation (policy + "espera" hold + echo
+  // rules) with a discrete-time clock.
+  const lost = sc.kind === 'working' && Policy === LegacyEndpointer; // legacy paused the mic while Claude worked (now it listens)
   const commits = [];
   if (!lost) {
-    const policy = new Policy({ kind: sc.kind === 'working' ? 'stop' : sc.kind, options: sc.options || [] });
-    const fire = (upTo) => {
-      while (policy.deadline != null && policy.deadline <= upTo) {
-        const at = policy.deadline;
-        commits.push({ t: at, text: policy.take() });
+    let now = from;
+    const timers = new Map();
+    let seq = 0;
+    const conv = new VoiceConversation({
+      now: () => now,
+      setTimer: (fn, ms) => { seq += 1; timers.set(seq, { at: now + ms, fn }); return seq; },
+      clearTimer: id => timers.delete(id),
+      policy: (kind, options) => new Policy({ kind, options: options.length ? options : sc.options || [] }),
+    });
+    conv.on('commit', c => commits.push({ t: now, text: c.text }));
+    const working = sc.kind === 'working';
+    conv.setCall({
+      id: sc.id, sessionId: 'lab', messages: [],
+      interactionKind: working ? null : sc.kind, waiting: !working, awaitingClaude: working,
+      currentQuestion: sc.options ? { options: sc.options.map(label => ({ label })) } : null,
+    });
+    const runUntil = (t) => {
+      for (;;) {
+        const due = [...timers.entries()].filter(([, x]) => x.at <= t).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        now = due[1].at;
+        timers.delete(due[0]);
+        due[1].fn();
       }
+      now = Math.max(now, t);
     };
     for (const e of own) {
-      fire(e.t);
-      if (e.type === 'speech' && e.state === 'start') policy.speechStart(e.t);
-      else if (e.type === 'speech' && e.state === 'end') policy.speechEnd(e.t, { expectFinal: !e.cancelled && (e.voiced_ms == null || e.voiced_ms >= 350) });
-      else if (e.type === 'rejected') policy.final(e.t, '', 0);
-      else if (e.type === 'partial') policy.partial(e.t, e.text);
-      else if (e.type === 'final') policy.final(e.t, e.text, e.confidence);
+      runUntil(e.t);
+      conv.stt(e);
     }
-    fire(Number.isFinite(until) ? until : Infinity);
+    runUntil(Number.isFinite(until) ? until : from + 60_000);
   }
   const lastEnd = last.end * 1000;
   const premature = commits.filter(c => c.t < lastEnd).length;

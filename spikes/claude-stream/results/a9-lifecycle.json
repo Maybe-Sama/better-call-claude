@@ -1,0 +1,183 @@
+{
+  "name": "a9-lifecycle",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:23:04.402Z",
+  "closeIdle": {
+    "closeToExit": 852.3,
+    "exit": {
+      "code": 0,
+      "signal": null
+    }
+  },
+  "closeMidTurn": {
+    "closeToExit": 9893.7,
+    "exit": {
+      "code": 0,
+      "signal": null
+    },
+    "resultBeforeExit": {
+      "subtype": "success",
+      "terminal_reason": "completed",
+      "text": "AFTER-SLEEP",
+      "tAfterClose": 9222.7
+    }
+  },
+  "killMidTool": {
+    "killToExit": 43.1,
+    "exit": {
+      "code": null,
+      "signal": "SIGTERM"
+    },
+    "treeBefore": [
+      "claude.exe",
+      "conhost.exe",
+      "mcp-server-windows-x64.exe",
+      "conhost.exe",
+      "cmd.exe",
+      "conhost.exe",
+      "cmd.exe",
+      "conhost.exe",
+      "cmd.exe",
+      "conhost.exe",
+      "node.exe",
+      "node.exe",
+      "node.exe",
+      "cmd.exe",
+      "cmd.exe",
+      "node.exe",
+      "node.exe",
+      "cmd.exe",
+      "node.exe",
+      "bash.exe",
+      "bash.exe",
+      "conhost.exe"
+    ],
+    "sleepBefore": 3,
+    "sleepAfter": 3,
+    "survivingChildren": [
+      "bash",
+      "bash",
+      "conhost"
+    ]
+  },
+  "idle": {
+    "idleSeconds": 315,
+    "first": {
+      "text": "READY",
+      "t": 4806.9
+    },
+    "samples": [
+      {
+        "s": 0,
+        "claudeWsMB": 241.3,
+        "claudeCpuS": 2.09,
+        "treeWsMB": 941.1,
+        "treeCpuS": 10.33,
+        "procs": 19
+      },
+      {
+        "s": 30,
+        "claudeWsMB": 231.1,
+        "claudeCpuS": 2.89,
+        "treeWsMB": 759.8,
+        "treeCpuS": 11.95,
+        "procs": 19
+      },
+      {
+        "s": 60,
+        "claudeWsMB": 231.6,
+        "claudeCpuS": 3.19,
+        "treeWsMB": 760.3,
+        "treeCpuS": 12.25,
+        "procs": 19
+      },
+      {
+        "s": 90,
+        "claudeWsMB": 227.5,
+        "claudeCpuS": 3.45,
+        "treeWsMB": 741.4,
+        "treeCpuS": 12.51,
+        "procs": 19
+      },
+      {
+        "s": 120,
+        "claudeWsMB": 208.1,
+        "claudeCpuS": 3.73,
+        "treeWsMB": 722,
+        "treeCpuS": 12.79,
+        "procs": 19
+      },
+      {
+        "s": 150,
+        "claudeWsMB": 204.8,
+        "claudeCpuS": 4.09,
+        "treeWsMB": 626.7,
+        "treeCpuS": 13.15,
+        "procs": 19
+      },
+      {
+        "s": 180,
+        "claudeWsMB": 204.8,
+        "claudeCpuS": 4.23,
+        "treeWsMB": 626.7,
+        "treeCpuS": 13.29,
+        "procs": 19
+      },
+      {
+        "s": 210,
+        "treeWsMB": 0,
+        "treeCpuS": 0,
+        "procs": 0
+      },
+      {
+        "s": 240,
+        "treeWsMB": 0,
+        "treeCpuS": 0,
+        "procs": 0
+      },
+      {
+        "s": 270,
+        "claudeWsMB": 172.4,
+        "claudeCpuS": 4.89,
+        "treeWsMB": 495.2,
+        "treeCpuS": 13.95,
+        "procs": 19
+      },
+      {
+        "s": 300,
+        "claudeWsMB": 173,
+        "claudeCpuS": 5.12,
+        "treeWsMB": 491.8,
+        "treeCpuS": 14.22,
+        "procs": 19
+      }
+    ],
+    "claudeCpuSecondsDuringIdle": 3.03,
+    "eventsWhileIdle": [],
+    "afterIdle": {
+      "text": "AWAKE",
+      "t": 2318.2
+    },
+    "processTree": [
+      "claude.exe",
+      "conhost.exe",
+      "mcp-server-windows-x64.exe",
+      "conhost.exe",
+      "cmd.exe",
+      "conhost.exe",
+      "cmd.exe",
+      "conhost.exe",
+      "cmd.exe",
+      "conhost.exe",
+      "node.exe",
+      "node.exe",
+      "node.exe",
+      "cmd.exe",
+      "cmd.exe",
+      "node.exe",
+      "node.exe",
+      "cmd.exe",
+      "node.exe"
+    ]
+  }
+}

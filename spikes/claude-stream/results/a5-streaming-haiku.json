@@ -1,0 +1,305 @@
+{
+  "name": "a5-streaming-haiku",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:15:23.805Z",
+  "summary": {
+    "model": "haiku",
+    "writeToFirstTextDelta": {
+      "n": 3,
+      "median": 2734.3,
+      "min": 2472.9,
+      "max": 8433.2
+    },
+    "gapMedianPerRep": [
+      25,
+      24.5,
+      24.9
+    ],
+    "gapMaxPerRep": [
+      44.3,
+      110.4,
+      99.1
+    ],
+    "gapP90PerRep": [
+      26.5,
+      28.6,
+      27.2
+    ],
+    "charsPerDeltaMedianPerRep": [
+      7,
+      7,
+      8
+    ]
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "writeToFirstStreamEvent": 2858.3,
+      "writeToFirstTextDelta": 8433.2,
+      "writeToResult": 11919.9,
+      "textDeltas": 126,
+      "textChars": 1157,
+      "charsPerDelta": {
+        "n": 126,
+        "median": 7,
+        "min": 1,
+        "max": 33
+      },
+      "gapMs": {
+        "n": 125,
+        "median": 25,
+        "min": 14,
+        "max": 44.3
+      },
+      "gapP90": 26.5,
+      "blockKindDeltaPairs": {
+        "thinking/thinking_delta": 5,
+        "thinking/signature_delta": 2,
+        "tool_use/input_json_delta": 9,
+        "text/text_delta": 126
+      },
+      "assistantEvents": [
+        {
+          "id": "msg_011CgeZGcrtnnGwPUcFJZjeS",
+          "blocks": [
+            "thinking"
+          ]
+        },
+        {
+          "id": "msg_011CgeZGcrtnnGwPUcFJZjeS",
+          "blocks": [
+            "tool_use"
+          ]
+        },
+        {
+          "id": "msg_011CgeZGxX62JFf9WG49Cf1c",
+          "blocks": [
+            "thinking"
+          ]
+        },
+        {
+          "id": "msg_011CgeZGxX62JFf9WG49Cf1c",
+          "blocks": [
+            "text"
+          ]
+        }
+      ],
+      "sequence": [
+        "system:hook_started",
+        "system:hook_started",
+        "system:hook_started",
+        "system:hook_response",
+        "system:hook_response",
+        "system:hook_response",
+        "system:init",
+        "system:status",
+        "se:message_start",
+        "se:content_block_start:thinking",
+        "system:thinking_tokens",
+        "se:content_block_delta:thinking_delta",
+        "system:thinking_tokens",
+        "se:content_block_delta:thinking_delta x2",
+        "system:thinking_tokens",
+        "se:content_block_delta:signature_delta",
+        "assistant:thinking",
+        "se:content_block_stop",
+        "se:content_block_start:tool_use",
+        "se:content_block_delta:input_json_delta x9",
+        "assistant:tool_use",
+        "se:content_block_stop",
+        "se:message_delta",
+        "se:message_stop",
+        "rate_limit_event",
+        "user:tool_result",
+        "system:status",
+        "se:message_start",
+        "se:content_block_start:thinking",
+        "system:thinking_tokens",
+        "se:content_block_delta:thinking_delta x2",
+        "system:thinking_tokens",
+        "se:content_block_delta:signature_delta",
+        "assistant:thinking",
+        "se:content_block_stop",
+        "se:content_block_start:text",
+        "se:content_block_delta:text_delta x126",
+        "assistant:text",
+        "se:content_block_stop",
+        "se:message_delta",
+        "se:message_stop",
+        "result:success"
+      ]
+    },
+    {
+      "rep": 1,
+      "writeToFirstStreamEvent": 754,
+      "writeToFirstTextDelta": 2734.3,
+      "writeToResult": 6148.7,
+      "textDeltas": 123,
+      "textChars": 1113,
+      "charsPerDelta": {
+        "n": 123,
+        "median": 7,
+        "min": 1,
+        "max": 43
+      },
+      "gapMs": {
+        "n": 122,
+        "median": 24.5,
+        "min": 0.1,
+        "max": 110.4
+      },
+      "gapP90": 28.6,
+      "blockKindDeltaPairs": {
+        "thinking/thinking_delta": 3,
+        "thinking/signature_delta": 2,
+        "tool_use/input_json_delta": 7,
+        "text/text_delta": 123
+      },
+      "assistantEvents": [
+        {
+          "id": "msg_011CgeZHM8853XeZ5hf6AMgZ",
+          "blocks": [
+            "thinking"
+          ]
+        },
+        {
+          "id": "msg_011CgeZHM8853XeZ5hf6AMgZ",
+          "blocks": [
+            "tool_use"
+          ]
+        },
+        {
+          "id": "msg_011CgeZHUTPxaw1aRjrXFton",
+          "blocks": [
+            "thinking"
+          ]
+        },
+        {
+          "id": "msg_011CgeZHUTPxaw1aRjrXFton",
+          "blocks": [
+            "text"
+          ]
+        }
+      ],
+      "sequence": [
+        "system:init",
+        "system:status",
+        "se:message_start",
+        "se:content_block_start:thinking",
+        "system:thinking_tokens",
+        "se:content_block_delta:thinking_delta x2",
+        "system:thinking_tokens",
+        "se:content_block_delta:signature_delta",
+        "assistant:thinking",
+        "se:content_block_stop",
+        "se:content_block_start:tool_use",
+        "se:content_block_delta:input_json_delta x7",
+        "assistant:tool_use",
+        "se:content_block_stop",
+        "se:message_delta",
+        "se:message_stop",
+        "user:tool_result",
+        "system:status",
+        "se:message_start",
+        "se:content_block_start:thinking",
+        "se:content_block_delta:thinking_delta",
+        "se:content_block_delta:signature_delta",
+        "assistant:thinking",
+        "se:content_block_stop",
+        "se:content_block_start:text",
+        "se:content_block_delta:text_delta x123",
+        "assistant:text",
+        "se:content_block_stop",
+        "se:message_delta",
+        "se:message_stop",
+        "result:success"
+      ]
+    },
+    {
+      "rep": 2,
+      "writeToFirstStreamEvent": 748.1,
+      "writeToFirstTextDelta": 2472.9,
+      "writeToResult": 5670.7,
+      "textDeltas": 121,
+      "textChars": 1229,
+      "charsPerDelta": {
+        "n": 121,
+        "median": 8,
+        "min": 1,
+        "max": 32
+      },
+      "gapMs": {
+        "n": 120,
+        "median": 24.9,
+        "min": 0.2,
+        "max": 99.1
+      },
+      "gapP90": 27.2,
+      "blockKindDeltaPairs": {
+        "thinking/thinking_delta": 3,
+        "thinking/signature_delta": 2,
+        "tool_use/input_json_delta": 6,
+        "text/text_delta": 121
+      },
+      "assistantEvents": [
+        {
+          "id": "msg_011CgeZHoZcBRot3r3XbAgUd",
+          "blocks": [
+            "thinking"
+          ]
+        },
+        {
+          "id": "msg_011CgeZHoZcBRot3r3XbAgUd",
+          "blocks": [
+            "tool_use"
+          ]
+        },
+        {
+          "id": "msg_011CgeZHugD3k6xpQDM8jzGo",
+          "blocks": [
+            "thinking"
+          ]
+        },
+        {
+          "id": "msg_011CgeZHugD3k6xpQDM8jzGo",
+          "blocks": [
+            "text"
+          ]
+        }
+      ],
+      "sequence": [
+        "system:init",
+        "system:status",
+        "se:message_start",
+        "se:content_block_start:thinking",
+        "system:thinking_tokens",
+        "se:content_block_delta:thinking_delta x2",
+        "system:thinking_tokens",
+        "se:content_block_delta:signature_delta",
+        "assistant:thinking",
+        "se:content_block_stop",
+        "se:content_block_start:tool_use",
+        "se:content_block_delta:input_json_delta x6",
+        "assistant:tool_use",
+        "se:content_block_stop",
+        "se:message_delta",
+        "se:message_stop",
+        "user:tool_result",
+        "system:status",
+        "se:message_start",
+        "se:content_block_start:thinking",
+        "se:content_block_delta:thinking_delta",
+        "se:content_block_delta:signature_delta",
+        "assistant:thinking",
+        "se:content_block_stop",
+        "se:content_block_start:text",
+        "se:content_block_delta:text_delta x121",
+        "assistant:text",
+        "se:content_block_stop",
+        "se:message_delta",
+        "se:message_stop",
+        "result:success"
+      ]
+    }
+  ]
+}

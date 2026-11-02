@@ -211,7 +211,7 @@ class VoiceConversation extends EventEmitter {
     }
     this.speechEndAt = this.now() - (Number(ev.silence_ms) || 0);
     const expectFinal = !ev.cancelled && (ev.voiced_ms == null || ev.voiced_ms >= MIN_TRANSCRIBED_MS);
-    this._policy().speechEnd(this.now(), { expectFinal });
+    this._policy().speechEnd(this.now(), { expectFinal, silenceMs: Number(ev.silence_ms) || 0 });
     this._arm();
     if (!this._draftText() && this.pendingSpeak) this._flushPendingSpeak();
     this._armHold();

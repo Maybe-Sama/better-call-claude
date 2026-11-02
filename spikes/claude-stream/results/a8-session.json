@@ -1,0 +1,94 @@
+{
+  "name": "a8-session",
+  "claudeVersion": null,
+  "at": "2026-11-02T18:19:13.366Z",
+  "sessionIdFlag": {
+    "requested": "33999318-15ec-464c-9393-80edf6b7c699",
+    "init": "33999318-15ec-464c-9393-80edf6b7c699",
+    "all": [
+      "33999318-15ec-464c-9393-80edf6b7c699"
+    ],
+    "matches": true,
+    "results": [
+      "NEW-SESSION-OK"
+    ],
+    "transcript": {
+      "exists": true,
+      "file": "C:\\Users\\diazm\\.claude\\projects\\E--tmp-claude-stream-spike\\33999318-15ec-464c-9393-80edf6b7c699.jsonl",
+      "lines": 30,
+      "types": [
+        "queue-operation",
+        "attachment",
+        "user",
+        "atis-latch",
+        "last-prompt",
+        "assistant",
+        "system",
+        "cost-state"
+      ],
+      "userPrompts": [
+        "Reply with exactly: NEW-SESSION-OK"
+      ],
+      "hasInterruptMarker": false
+    }
+  },
+  "base": {
+    "exit": 0,
+    "session_id": "dc749706-229c-42d7-88c0-3ffa2eefa5c8",
+    "result": "OK",
+    "stderr": ""
+  },
+  "resumeStream": {
+    "init": "dc749706-229c-42d7-88c0-3ffa2eefa5c8",
+    "all": [
+      "dc749706-229c-42d7-88c0-3ffa2eefa5c8"
+    ],
+    "sameAsBase": true,
+    "results": [
+      "TEAL",
+      "undefined"
+    ]
+  },
+  "concurrentResume": {
+    "exit": 0,
+    "session_id": "dc749706-229c-42d7-88c0-3ffa2eefa5c8",
+    "result": "TEAL OTTER",
+    "stderr": "",
+    "sameId": true
+  },
+  "streamAfterConcurrent": "STILL-HERE",
+  "laterResume": {
+    "exit": 0,
+    "session_id": "dc749706-229c-42d7-88c0-3ffa2eefa5c8",
+    "result": "TEAL OTTER",
+    "stderr": "",
+    "sameId": true
+  },
+  "transcripts": {
+    "base": {
+      "exists": true,
+      "file": "C:\\Users\\diazm\\.claude\\projects\\E--tmp-claude-stream-spike\\dc749706-229c-42d7-88c0-3ffa2eefa5c8.jsonl",
+      "lines": 92,
+      "types": [
+        "queue-operation",
+        "attachment",
+        "user",
+        "atis-latch",
+        "last-prompt",
+        "assistant",
+        "system",
+        "cost-state",
+        "mode"
+      ],
+      "userPrompts": [
+        "For later: my favorite color is TEAL. Reply with exactly: OK",
+        "What is my favorite color? Reply with one word.",
+        "For later: my favorite animal is OTTER. Reply with exactly: ",
+        "What are my favorite color and my favorite animal? Reply wit",
+        "Reply with exactly: STILL-HERE",
+        "What are my favorite color and my favorite animal? Reply wit"
+      ],
+      "hasInterruptMarker": false
+    }
+  }
+}

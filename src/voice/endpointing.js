@@ -71,12 +71,17 @@ class LegacyEndpointer {
 // second for a finished sentence, seconds when the words point forward ("y…", "pues…", "luego").
 // Fixed timers remain only as the floor (minSilenceMs) and the ceiling of each class.
 
+// Two numbers per class: how long to wait once the transcript is there, and the minimum silence since
+// the voice really stopped (speculative transcripts can arrive while a natural pause is still going on).
 const ADAPTIVE = {
-  minSilenceMs: 300,    // never commit sooner than this after the voice stops
+  minSilenceMs: 300,    // never commit sooner than this after the end-of-speech event
   shortMs: 120,         // "sí" / "la segunda" while Claude waits for a permission or a choice
-  completeMs: 500,      // ends like a sentence (. ! ?)
-  openMs: 1100,         // no closing punctuation, but nothing announcing more either
-  unfinishedMs: 2800,   // conjunction, filler, comma, "…", "luego": the user is still thinking
+  shortFloorMs: 600,
+  completeMs: 300,      // ends like a sentence (. ! ?)
+  completeFloorMs: 1000, // free reply; 800 when answering a question
+  openMs: 900,          // no closing punctuation, but nothing announcing more either
+  openFloorMs: 1600,
+  unfinishedMs: 2800,   // conjunction, filler, comma, "…", "luego", "un momento": the user is still thinking
   finalTimeoutMs: 6000, // safety: a transcript that never arrives does not block the turn forever
   minConfidence: 0.4,
 };
@@ -87,6 +92,8 @@ function fold(text) {
 }
 
 const UNFINISHED_EXTRA = /(\b(primero|segundo|despues|antes|mientras|cuando|aunque|osea|o sea)|:)\s*$/;
+// The last phrase only asks for time.
+const HOLD_TAIL = /(^|[.,;!?]\s*)(no,? )?(espera|un momento|un segundo|dejame pensar|deja que piense|a ver|eh|em|mm|pues|bueno)[\s.,…!]*$/;
 const SHORT_ANSWER = /^(si|no|vale|ok|okay|claro|venga|dale|adelante|de acuerdo|perfecto|correcto|hazlo|mejor no|para nada|ninguna|ninguno|todas|todos|(la |el |opcion )?(primera|segunda|tercera|cuarta|ultima|primero|segundo|tercero|cuarto|ultimo|uno|dos|tres|cuatro|[a-e]))\b/;
 
 // Whisper writes a lone Spanish "sí" as the letter "C." surprisingly often.
@@ -110,8 +117,10 @@ class AdaptiveEndpointer extends LegacyEndpointer {
   partial() { /* partials only arrive while the user talks, and speechStart already cancelled */ }
 
   // expectFinal: false when the worker will not transcribe this phrase (too short, cancelled).
-  speechEnd(t, { expectFinal = true } = {}) {
+  // silenceMs: how long the worker waited in silence before reporting the end (voice stopped at t - silenceMs).
+  speechEnd(t, { expectFinal = true, silenceMs = 0 } = {}) {
     if (expectFinal) this.pendingFinals += 1;
+    this.voiceStoppedAt = t - (Number(silenceMs) || 0);
     super.speechEnd(t);
   }
 
@@ -133,12 +142,25 @@ class AdaptiveEndpointer extends LegacyEndpointer {
     // Deciding on the previous phrase while the newest one is still being transcribed sends half a turn.
     if (this.pendingFinals > 0) { this.deadline = (this.speechEndedAt || t) + ADAPTIVE.finalTimeoutMs; return; }
     const last = this.parts.at(-1);
+    const answering = this.kind === 'permission' || this.kind === 'ask';
     let wait;
-    if (THINKING_TAIL.test(last) || UNFINISHED_EXTRA.test(fold(last))) wait = ADAPTIVE.unfinishedMs;
-    else if ((this.kind === 'permission' || this.kind === 'ask') && this.isShortAnswer(this.text())) wait = ADAPTIVE.shortMs;
-    else if (/[.!?]["»)]?\s*$/.test(last)) wait = ADAPTIVE.completeMs;
-    else wait = ADAPTIVE.openMs;
-    this.deadline = Math.max(t + wait, (this.speechEndedAt || t) + ADAPTIVE.minSilenceMs);
+    let floor;
+    if (THINKING_TAIL.test(last) || UNFINISHED_EXTRA.test(fold(last)) || HOLD_TAIL.test(fold(last))) {
+      wait = ADAPTIVE.unfinishedMs;
+      floor = 0;
+    } else if (answering && this.isShortAnswer(this.text())) {
+      wait = ADAPTIVE.shortMs;
+      floor = ADAPTIVE.shortFloorMs;
+    } else if (/[.!?]["»)]?\s*$/.test(last)) {
+      wait = ADAPTIVE.completeMs;
+      floor = answering ? ADAPTIVE.completeFloorMs - 200 : ADAPTIVE.completeFloorMs;
+    } else {
+      wait = ADAPTIVE.openMs;
+      floor = ADAPTIVE.openFloorMs;
+    }
+    const ended = this.speechEndedAt || t;
+    const stopped = this.voiceStoppedAt ?? ended;
+    this.deadline = Math.max(t + wait, ended + ADAPTIVE.minSilenceMs, stopped + floor);
   }
 }
 
