@@ -160,6 +160,8 @@ function renderActive(call) {
       </div>
     </div></section>`;
 
+  // The caption is rewritten many times a second: one listener on it handles its ✕.
+  document.getElementById('liveCaption').onclick = (e) => { if (e.target.closest('[data-discard]')) discardHeard(); };
   let transcript = document.getElementById('transcript');
   if (keptTranscript) { transcript.replaceWith(keptTranscript); transcript = keptTranscript; }
   transcript.dataset.callId = call.id;
@@ -251,14 +253,26 @@ function messageHtml(msg) {
   return `<div class="message ${role}"><div class="sender">${sender}</div><div class="bubble">${esc(msg.text)}</div>${note}</div>`;
 }
 
+// What was heard can be thrown away before it is sent (noise taken for words, or starting over).
+const DISCARD_BTN = '<button class="caption-discard" data-discard aria-label="Borrar lo escuchado" title="Borrar lo escuchado (Esc)">✕</button>';
+function discardHeard() {
+  if (!voiceUi.draft && !voiceUi.partial) return;
+  window.agentCall.discardDraft().catch(() => {});
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !activeCall() || (!voiceUi.draft && !voiceUi.partial)) return;
+  e.preventDefault();
+  discardHeard();
+});
+
 function liveCaptionHtml(call = activeCall()) {
   const { draft, partial } = voiceUi;
   if (draft || partial) {
-    const text = `${esc(draft)}${partial ? ` <span class="partial">${esc(partial)}</span>` : ''}`;
+    const text = `${DISCARD_BTN}${esc(draft)}${partial ? ` <span class="partial">${esc(partial)}</span>` : ''}`;
     if (voiceUi.holding && voiceUi.deadlineIn == null) return `${text}<div class="countdown-hint">Te escucho. Sigue cuando quieras.</div>`;
     if (voiceUi.deadlineIn == null) return text;
     const where = call && !canRespond(call) ? 'Se lo diré a Claude' : 'Enviando';
-    return `${text}<div class="countdown" aria-hidden="true"><span style="animation-duration:${voiceUi.deadlineIn}ms"></span></div><div class="countdown-hint">${where}… sigue hablando para añadir, o pulsa Enviar.</div>`;
+    return `${text}<div class="countdown" aria-hidden="true"><span style="animation-duration:${voiceUi.deadlineIn}ms"></span></div><div class="countdown-hint">${where}… sigue hablando para añadir, pulsa Enviar, o ✕ para borrarlo.</div>`;
   }
   if (voiceUi.lowConfidence && !ttsSpeaking) return 'No te he entendido bien. Repítelo o escríbelo.';
   if (!call) return '<span class="partial">—</span>';

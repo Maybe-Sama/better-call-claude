@@ -458,6 +458,58 @@ test('settle waits for the transcript of what the user was saying (review round 
   assert.equal(settled, true);
 });
 
+// Live request: "una X por si el micrófono escucha algo cuando era silencio, para cancelar lo que se ha
+// escuchado antes de que se envíe, o por si se quiere empezar a hablar desde el principio".
+test('✕ throws away what was heard before it is sent', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(600);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Gracias.', confidence: 0.7 }); // noise taken for words
+  h.conv.discardDraft();
+  h.advance(10_000);
+  assert.equal(h.events('commit').length, 0);
+});
+
+test('✕ also drops the phrase still being transcribed; what is said next starts afresh', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(800);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.discardDraft(); // its transcript has not come yet
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 2, onset_ms: 90 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Esto no era para Claude.', confidence: 0.9 });
+  h.advance(900);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 2, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 2, text: 'Revisa el login.', confidence: 0.9 });
+  h.advance(10_000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Revisa el login.']);
+});
+
+test('✕ after a noise cut Claude: Claude goes on', () => {
+  const h = harness();
+  const { streamed, id } = (() => {
+    const streamedOut = [];
+    h.conv.on('speak-stream', s => streamedOut.push(s));
+    h.conv.setEchoCancelled(true);
+    h.conv.setCall(waitingCall({ messages: [] }));
+    h.conv.streamTurnStart();
+    h.conv.streamSentence('Uso la skill de brainstorming.');
+    const first = streamedOut[0].id;
+    h.conv.tts({ type: 'chunk', id: first, seq: 0, text: 'Uso la skill de brainstorming.' });
+    return { streamed: streamedOut, id: first };
+  })();
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 7, onset_ms: 90 });
+  h.advance(BARGE_CONFIRM_MS + 50);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 7, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 7, text: 'Ah, sí, sí.', confidence: 0.8 });
+  assert.ok(h.events('tts').some(t => t.action === 'stop'));
+  h.conv.discardDraft();
+  assert.ok(streamed.some(s => s.id !== id && s.action === 'start'), 'Claude picks up again');
+});
+
 test('without aec, the voice detector alone never stops Claude (it may be its own echo)', () => {
   const h = harness();
   h.conv.setCall(waitingCall());

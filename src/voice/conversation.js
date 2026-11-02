@@ -113,6 +113,9 @@ class VoiceConversation extends EventEmitter {
       this.pendingSpeak = null;
       this.lastPlayed = null;
       this.noiseCut = null;
+      this.lastCut = null;
+      this.discardedIds = null;
+      this.discardCount = 0;
       this.streamCut = false; // a cut belongs to the call it happened in
       this.replyFrom = 0;     // a round trip never spans a hang-up
       this.streamId = null;
@@ -187,7 +190,9 @@ class VoiceConversation extends EventEmitter {
     if (!this.listening()) return;
     if (ev.type === 'speech' && ev.state === 'start') this._speechStart(ev);
     else if (ev.type === 'speech' && ev.state === 'end') this._speechEnd(ev);
-    else if (ev.type === 'partial') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._partial(String(ev.text || '')); }
+    else if ((ev.type === 'partial' || ev.type === 'final' || ev.type === 'rejected') && this._discarded(ev)) {
+      if (ev.type !== 'partial') { this._policy().final(this.now(), '', 0); this._arm(); }
+    } else if (ev.type === 'partial') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._partial(String(ev.text || '')); }
     else if (ev.type === 'final') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._final(String(ev.text || ''), typeof ev.confidence === 'number' ? ev.confidence : 1, ev.utterance); }
     else if (ev.type === 'rejected') this._final('', 0, ev.utterance); // the phrase had no words
     else return;
@@ -448,6 +453,8 @@ class VoiceConversation extends EventEmitter {
     // Until the phrase that cut Claude turns out to have words, the cut may be a click or a key.
     this.noiseCut = reason === 'final' || !this.interrupted ? null
       : { interrupted: this.interrupted, utterance: this.utterance, streaming: Boolean(this.playing.streaming) };
+    // Undone if the user throws away (✕) the words that cut Claude before they are sent.
+    this.lastCut = this.interrupted ? { interrupted: this.interrupted, utterance: this.utterance, streaming: Boolean(this.playing.streaming) } : null;
     this._stopTts();
   }
 
@@ -589,6 +596,7 @@ class VoiceConversation extends EventEmitter {
 
   _commit(text, source) {
     this.noiseCut = null; // a new turn: an old noise must not bring back what Claude was saying
+    this.lastCut = null;  // the words that cut Claude were sent: the cut stands
     const route = this.turn === 'awaitingUser' ? 'answer' : 'steer';
     const commit = {
       callId: this.call?.id || null,
@@ -627,6 +635,34 @@ class VoiceConversation extends EventEmitter {
   }
 
   // A quick-answer button (or anything outside the voice draft) answered the call.
+  // "✕" on what was heard: noise taken for words, or the user starts over. It never reaches Claude,
+  // nor does the phrase still being transcribed; what is said next starts a fresh turn. If those words
+  // had cut Claude, Claude picks up again where it was.
+  discardDraft() {
+    const inFlight = (this.policy?.pendingFinals || 0) + (this.userSpeaking ? 1 : 0);
+    this._resetDraft();
+    this.discardedIds = new Set(this.phraseStarts.keys()); // phrases begun so far (their transcripts may still come)
+    this.discardCount = inFlight;                          // engines without phrase ids: this many transcripts
+    this._debug('borras lo escuchado');
+    if (this.ducked || this.duckedFor !== undefined) this._releaseDuck(null);
+    if (this.lastCut && this.interrupted === this.lastCut.interrupted && !this.playing) {
+      this.noiseCut = this.lastCut;
+      this._resumeAfterNoise();
+    }
+    this.lastCut = null;
+    this._ui();
+  }
+
+  // A transcript (or partial) of a phrase the user threw away with ✕.
+  _discarded(ev) {
+    if (ev.utterance != null && this.discardedIds) return this.discardedIds.has(ev.utterance);
+    if (ev.utterance == null && this.discardCount > 0) {
+      if (ev.type !== 'partial') this.discardCount -= 1;
+      return true;
+    }
+    return false;
+  }
+
   clearDraft() {
     this._resetDraft();
     this._ui();

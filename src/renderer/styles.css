@@ -73,6 +73,9 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .system .bubble { font-size: 11px; color: var(--yellow); background: rgba(240,202,104,.06); }
 .live-caption { margin: 0 15px 10px; border: 1px dashed rgba(114,224,166,.2); border-radius: 12px; padding: 9px 11px; color: #b8c3d1; min-height: 38px; font-size: 12px; line-height: 1.45; }
 .live-caption .partial { color: #717d8f; }
+.caption-discard { float: right; margin: -3px -5px 4px 10px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: #c9d1dc; font-size: 11px; line-height: 1; cursor: pointer; }
+.caption-discard:hover { color: var(--red); border-color: rgba(255,127,137,.35); background: rgba(255,127,137,.1); }
+.caption-discard:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .call-controls { border-top: 1px solid var(--line); padding: 10px 12px 12px; background: rgba(10,12,17,.9); }
 .input-row { display: grid; grid-template-columns: 36px 1fr 62px; gap: 7px; align-items: center; }
 .mic-btn { height: 38px; width: 36px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 11px; cursor: pointer; }

@@ -853,6 +853,7 @@ function registerIpc() {
     return voice.submitTyped(text);
   });
   ipcMain.handle('agentcall:adopt-draft', () => voice.adoptDraft());
+  ipcMain.handle('agentcall:discard-draft', () => { log('UI: borrar lo escuchado'); voice.discardDraft(); return true; });
   ipcMain.on('agentcall:set-typing', (_e, value) => voice.setTyping(value));
   ipcMain.on('agentcall:pcm', (_e, data) => stt?.writePcm(data));
   ipcMain.on('agentcall:capture-status', (_e, status) => onCaptureStatus(status));
