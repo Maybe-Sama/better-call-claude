@@ -51,13 +51,31 @@ function launchTarget() {
   const data = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'AgentCall') : null;
   const candidates = [];
   try {
-    const saved = JSON.parse(fs.readFileSync(path.join(data, 'launch.json'), 'utf8'));
-    if (saved.electron && saved.appDir) candidates.push(saved);
-  } catch { /* AgentCall never ran on this machine */ }
+    const { electron, appDir } = JSON.parse(fs.readFileSync(path.join(data, 'launch.json'), 'utf8'));
+    if (typeof electron === 'string' && electron && typeof appDir === 'string' && appDir) candidates.push({ electron, appDir });
+  } catch { /* AgentCall never ran on this machine, or launch.json is damaged */ }
   for (const appDir of [path.resolve(__dirname, '..', '..'), data && path.join(data, 'app')]) {
     if (appDir) candidates.push({ electron: path.join(appDir, 'node_modules', 'electron', 'dist', 'electron.exe'), appDir });
   }
-  return candidates.find(c => fs.existsSync(c.electron) && fs.existsSync(path.join(c.appDir, 'package.json')));
+  return candidates.find(c => {
+    try { return fs.existsSync(c.electron) && fs.existsSync(path.join(c.appDir, 'package.json')); } catch { return false; }
+  });
+}
+
+// Opens AgentCall and resolves true once it listens; false if it cannot start or does not answer in time.
+async function startAgentCall(target, timeoutMs = STARTUP_MS) {
+  let failed = false;
+  try {
+    const child = spawn(target.electron, [target.appDir], { cwd: target.appDir, detached: true, stdio: 'ignore' });
+    child.on('error', () => { failed = true; }); // e.g. a damaged electron.exe: unavailable, not a hook error
+    child.unref();
+  } catch { return false; }
+  const deadline = Date.now() + timeoutMs;
+  while (!failed && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 500));
+    if (!failed && await request('GET', `${BASE}/health`, null, 700)) return true;
+  }
+  return false;
 }
 
 async function forward(endpoint, input) {
@@ -78,14 +96,10 @@ async function main() {
   // AgentCall is closed. Only "/saul on" opens it; everything else continues as if it did not exist.
   if (endpoint !== 'user-prompt-submit' || !TURN_ON.test(String(payload.prompt || ''))) return;
   const target = launchTarget();
-  if (!target) return;
-  spawn(target.electron, [target.appDir], { cwd: target.appDir, detached: true, stdio: 'ignore' }).unref();
-  const deadline = Date.now() + STARTUP_MS;
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, 500));
-    if (await request('GET', `${BASE}/health`, null, 700)) { await forward(endpoint, input); return; }
-  }
+  if (target && await startAgentCall(target)) await forward(endpoint, input);
 }
 
 // No process.exit(): it could cut the stdout write short; nothing else keeps the process alive.
-main().catch(() => {});
+if (require.main === module) main().catch(() => {});
+
+module.exports = { launchTarget, startAgentCall };
