@@ -106,6 +106,24 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .card-top { display: flex; gap: 8px; align-items: center; }
 .card-title { min-width: 0; flex: 1; font-size: 13px; font-weight: 720; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-status { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+/* What Claude is doing, first thing on each card: words + icon + colour, and a stripe to scan the list. */
+.call-card { position: relative; overflow: hidden; --state: #4a5262; }
+.call-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--state); }
+.call-card.state-working { --state: var(--yellow); }
+.call-card.state-ready { --state: var(--green); }
+.call-card.state-needs { --state: var(--red); }
+.claude-state { margin-top: 9px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.claude-state strong { font-size: 13px; font-weight: 780; color: var(--state); white-space: nowrap; }
+.call-card.state-idle .claude-state strong, .call-card.state-gone .claude-state strong { color: #a6afbd; }
+.state-detail { min-width: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state-icon { flex: 0 0 20px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 900; line-height: 1; color: var(--state); background: color-mix(in srgb, var(--state) 15%, transparent); border: 1px solid color-mix(in srgb, var(--state) 30%, transparent); }
+.call-card.state-idle .state-icon, .call-card.state-gone .state-icon { color: #a6afbd; }
+.dots { display: inline-flex; gap: 2px; }
+.dots i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; animation: working-dot 1.2s infinite ease-in-out; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes working-dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .dots i { animation: none; opacity: .85; } }
 .card-context { margin-top: 7px; color: #9aa4b4; font-size: 11px; line-height: 1.4; }
 .card-time { margin-top: 8px; font-size: 9px; color: #616b7b; }
 .listen-state { display: flex; align-items: center; gap: 8px; }

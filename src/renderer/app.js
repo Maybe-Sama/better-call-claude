@@ -42,7 +42,7 @@ function callLabel(call) {
   if (call.interactionKind === 'permission') return 'PERMISO NECESARIO';
   return 'NECESITA RESPUESTA';
 }
-function statusLabel(status) { return ({ ended: 'Colgada', onhold: 'En espera', parked: 'Trabajando', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
+function statusLabel(status) { return ({ ended: 'Colgada', onhold: 'En espera', parked: 'Colgada', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
 function timeAgo(ts) {
   const diff = Math.max(0, Date.now() - ts);
   if (diff < 60_000) return 'ahora';
@@ -290,7 +290,7 @@ function renderDashboard() {
     </div>
     <button class="primary call-claude" id="callClaudeBtn">Llamar a Claude</button>
     ${calls.length
-      ? `<div class="list-label">Pendientes</div><div class="call-list">${calls.map(callCardHtml).join('')}</div>`
+      ? `<div class="list-label">Llamadas</div><div class="call-list">${calls.map(callCardHtml).join('')}</div>`
       : '<div class="empty"><div class="empty-icon" aria-hidden="true">☎</div><strong>Todo tranquilo</strong><div>No hay llamadas pendientes.</div></div>'}
   </section>`;
   document.getElementById('callClaudeBtn').onclick = async (e) => {
@@ -328,15 +328,22 @@ function renderDashboard() {
   main.querySelectorAll('[data-call-id]').forEach(card => { card.onclick = () => callBack(card.dataset.callId); });
 }
 
+// What Claude is doing in a call waiting in the list: the first thing its card says, in words, an icon
+// and a colour (the colour alone never carries it).
+function claudeState(call) {
+  if (call.sessionEnded) return { key: 'gone', icon: '■', label: 'Sesión cerrada', detail: 'Claude ya no está en esta conversación' };
+  const asks = call.waiting && (call.interactionKind === 'permission' || call.interactionKind === 'ask');
+  if (asks) return { key: 'needs', icon: '!', label: 'Te necesita', detail: call.interactionKind === 'permission' ? 'espera tu permiso' : 'tiene una pregunta' };
+  if (call.type === 'error') return { key: 'needs', icon: '!', label: 'Se ha detenido', detail: 'por un error' };
+  if (call.awaitingClaude) return { key: 'working', icon: '', label: 'Trabajando', detail: call.status === 'parked' ? 'te llamará al terminar' : 'sigue con la tarea' };
+  if (call.status === 'ended') return { key: 'idle', icon: '–', label: 'Colgada', detail: 'puedes volver unos minutos' };
+  return { key: 'ready', icon: '✓', label: 'Listo', detail: `terminó ${timeAgo(call.updatedAt)}` };
+}
+
 function callCardHtml(call) {
-  let extra = timeAgo(call.createdAt);
-  if (call.status === 'snoozed' && call.snoozedUntil) extra = `vuelve a las ${new Date(call.snoozedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  // Hung up while Claude works: it calls back when done; the user can also go back to it now.
-  if (call.status === 'parked') extra = 'te llamará al terminar';
-  // On hold nothing rings: the card says what Claude is doing so the user knows when to come back.
-  if (call.status === 'onhold') extra = call.interactionKind === 'permission' || call.interactionKind === 'ask' ? 'Claude te necesita' : call.awaitingClaude ? 'Claude sigue trabajando' : 'Claude te espera';
-  if (call.status === 'ended') extra = 'puedes volver unos minutos';
-  if (call.sessionEnded) extra = 'la sesión de Claude se ha cerrado';
+  const st = claudeState(call);
+  let when = timeAgo(call.createdAt);
+  if (call.status === 'snoozed' && call.snoozedUntil) when = `vuelve a las ${new Date(call.snoozedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   // A conversation waiting in the list can be ended from there (Claude stops and its session closes).
   const armed = armedEnd?.id === call.id && armedEnd.until > Date.now();
   const endLabel = !call.stream ? 'Colgar' : call.sessionEnded ? 'Quitar' : armed ? '¿Detener a Claude? Pulsa otra vez' : 'Terminar';
@@ -346,10 +353,14 @@ function callCardHtml(call) {
   const back = call.status === 'parked' || call.status === 'onhold';
   const action = call.status === 'snoozed' || call.sessionEnded ? ''
     : `<button class="card-action" data-back-id="${esc(call.id)}">${back ? 'Volver a la llamada' : call.status === 'ended' ? 'Volver a llamar' : 'Devolver llamada'} →</button>`;
-  return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}">
+  const icon = st.key === 'working'
+    ? '<span class="state-icon" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span></span>'
+    : `<span class="state-icon" aria-hidden="true">${st.icon}</span>`;
+  return `<article class="call-card state-${st.key} ${esc(call.type)}" data-call-id="${esc(call.id)}">
     <div class="card-top"><div class="card-title">${esc(call.title)}</div><div class="card-status">${esc(statusLabel(call.status))}</div></div>
+    <div class="claude-state">${icon}<strong>${esc(st.label)}</strong><span class="state-detail">${esc(st.detail)}</span></div>
     <div class="card-context">${esc(call.context)}</div>
-    <div class="card-time">${esc(callLabel(call))}${call.detail ? ` · ${esc(call.detail)}` : ''} · ${esc(extra)}${action}${end}</div>
+    <div class="card-time">${call.detail && st.key !== 'working' ? `${esc(call.detail)} · ` : ''}${esc(when)}${action}${end}</div>
   </article>`;
 }
 
