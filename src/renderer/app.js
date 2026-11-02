@@ -12,6 +12,7 @@ let state = { calls: [], activeId: null, dnd: false, snoozeOptions: [] };
 let muted = false;
 let ttsSpeaking = false;
 let currentUtterance = null;
+const transcriptHtml = new WeakMap(); // transcript element → the messages HTML it shows
 let browserUtteranceId = null;
 let ringStopper = null;
 let sttReady = false;
@@ -30,15 +31,16 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch])); }
 function activeCall() { return state.calls.find(c => c.id === state.activeId) || null; }
 function ringingCall() { return state.calls.find(c => c.status === 'ringing') || null; }
-function listedCalls() { return state.calls.filter(c => ['parked', 'pending', 'snoozed', 'queued'].includes(c.status)); }
+function listedCalls() { return state.calls.filter(c => ['onhold', 'parked', 'pending', 'snoozed', 'queued'].includes(c.status)); }
 
 function callLabel(call) {
   if (call.type === 'error') return 'ERROR';
+  if (call.stream && call.interactionKind !== 'permission' && call.interactionKind !== 'ask') return call.awaitingClaude ? 'CLAUDE TRABAJANDO' : 'RESULTADO LISTO';
   if (call.type === 'completion') return 'RESULTADO LISTO';
   if (call.interactionKind === 'permission') return 'PERMISO NECESARIO';
   return 'NECESITA RESPUESTA';
 }
-function statusLabel(status) { return ({ parked: 'Trabajando', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
+function statusLabel(status) { return ({ onhold: 'En espera', parked: 'Trabajando', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
 function timeAgo(ts) {
   const diff = Math.max(0, Date.now() - ts);
   if (diff < 60_000) return 'ahora';
@@ -122,6 +124,14 @@ function renderActive(call) {
   const oldInput = document.getElementById('textInput');
   const draft = oldInput ? { value: oldInput.value, focused: document.activeElement === oldInput, start: oldInput.selectionStart, end: oldInput.selectionEnd } : null;
 
+  // The transcript survives re-renders (they come several times a second while Claude streams): it
+  // only grows, and it follows the bottom only if the user was there. Rebuilding it jumped to the
+  // top and scrolled back down on every change (live test 2026-11-02: "es mareante").
+  const oldTranscript = document.getElementById('transcript');
+  const keptTranscript = oldTranscript && oldTranscript.dataset.callId === call.id ? oldTranscript : null;
+  const atBottom = !keptTranscript || keptTranscript.scrollHeight - keptTranscript.scrollTop - keptTranscript.clientHeight < 48;
+  const readingAt = keptTranscript ? keptTranscript.scrollTop : 0; // lost when the node is moved
+
   const queued = state.calls.filter(c => c.status === 'queued').length;
   const answering = canRespond(call);
   main.innerHTML = `<section class="active-call">
@@ -132,7 +142,7 @@ function renderActive(call) {
       <div class="status-pill ${call.awaitingClaude ? 'working' : ''}"><span id="callClock">00:00</span></div>
     </div>
     ${queued ? `<div class="queue-strip">☎ ${queued} ${queued === 1 ? 'llamada esperando' : 'llamadas esperando'} en cola</div>` : ''}
-    <div class="transcript" id="transcript" aria-live="polite">${call.messages.map(messageHtml).join('')}</div>
+    <div class="transcript" id="transcript" aria-live="polite"></div>
     ${quickAnswersHtml(call)}
     <div class="live-caption" id="liveCaption">${liveCaptionHtml(call)}</div>
     <div class="call-controls">
@@ -143,12 +153,22 @@ function renderActive(call) {
       </div>
       <div class="bottom-row">
         <div class="listen-state" id="listenState"><span class="level" aria-hidden="true"><span id="levelBar"></span></span><span id="listenText">${esc(callStatusText(call))}</span></div>
+        ${call.stream ? '<button id="holdBtn" class="secondary hold-btn" title="Claude sigue; vuelves desde la lista">En espera</button>' : ''}
         <button id="hangupBtn" class="hangup">Colgar</button>
       </div>
     </div></section>`;
 
-  const transcript = document.getElementById('transcript');
-  transcript.scrollTop = transcript.scrollHeight;
+  let transcript = document.getElementById('transcript');
+  if (keptTranscript) { transcript.replaceWith(keptTranscript); transcript = keptTranscript; }
+  transcript.dataset.callId = call.id;
+  const html = call.messages.map(messageHtml).join('');
+  const shown = transcriptHtml.get(transcript) || '';
+  if (html !== shown) {
+    if (shown && html.startsWith(shown)) transcript.insertAdjacentHTML('beforeend', html.slice(shown.length));
+    else transcript.innerHTML = html;
+    transcriptHtml.set(transcript, html);
+  }
+  transcript.scrollTop = atBottom ? transcript.scrollHeight : readingAt;
   updateClock();
   updateLevel();
   if (!clockTimer) clockTimer = setInterval(updateClock, 1000);
@@ -156,6 +176,8 @@ function renderActive(call) {
   bindQuickAnswers(call);
   document.getElementById('rateBtn').onclick = () => setVoiceRate(VOICE_RATES[(VOICE_RATES.indexOf(voiceRate) + 1) % VOICE_RATES.length]);
   document.getElementById('muteBtn').onclick = async () => { muted = !muted; await window.agentCall.setMuted(muted); render(); };
+  const holdBtn = document.getElementById('holdBtn');
+  if (holdBtn) holdBtn.onclick = async () => { stopSpeech(); await window.agentCall.hold(call.id); };
   document.getElementById('hangupBtn').onclick = async () => {
     stopSpeech();
     await window.agentCall.hangup(call.id);
@@ -285,7 +307,10 @@ function callCardHtml(call) {
   if (call.status === 'snoozed' && call.snoozedUntil) extra = `vuelve a las ${new Date(call.snoozedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   // Hung up while Claude works: it calls back when done; the user can also go back to it now.
   if (call.status === 'parked') extra = 'te llamará al terminar';
-  const action = call.status === 'snoozed' ? '' : `<span class="card-action">${call.status === 'parked' ? 'Volver a la llamada' : 'Devolver llamada'} →</span>`;
+  // On hold nothing rings: the card says what Claude is doing so the user knows when to come back.
+  if (call.status === 'onhold') extra = call.interactionKind === 'permission' || call.interactionKind === 'ask' ? 'Claude te necesita' : call.awaitingClaude ? 'Claude sigue trabajando' : 'Claude te espera';
+  const back = call.status === 'parked' || call.status === 'onhold';
+  const action = call.status === 'snoozed' ? '' : `<span class="card-action">${back ? 'Volver a la llamada' : 'Devolver llamada'} →</span>`;
   const interactive = call.status !== 'snoozed' ? 'role="button" tabindex="0"' : 'aria-disabled="true"';
   return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}" ${interactive}>
     <div class="card-top"><div class="card-title">${esc(call.title)}</div><div class="card-status">${esc(statusLabel(call.status))}</div></div>
@@ -609,7 +634,8 @@ function syncRing(call) {
   if (syncRing.current === id) return;
   stopRing();
   syncRing.current = id;
-  if (call) startRing(call.type);
+  // A conversation calling back with a result rings like a result; one with a question, like a question.
+  if (call) startRing(call.stream && call.interactionKind !== 'permission' && call.interactionKind !== 'ask' ? 'completion' : call.type);
 }
 syncRing.current = null;
 

@@ -63,7 +63,7 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .status-pill { flex: 0 0 auto; font-size: 10px; color: var(--green); background: rgba(114,224,166,.08); border-radius: 99px; padding: 6px 8px; }
 .status-pill.working { color: var(--yellow); background: rgba(240,202,104,.08); }
 .queue-strip { padding: 8px 14px; font-size: 11px; background: rgba(184,164,255,.08); color: #cfc3ff; border-bottom: 1px solid rgba(184,164,255,.12); }
-.transcript { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 15px 12px; scroll-behavior: smooth; }
+.transcript { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 15px 12px; overflow-anchor: none; }
 .message { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
 .message.user { align-items: flex-end; }
 .message.assistant, .message.system { align-items: flex-start; }
@@ -85,6 +85,7 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .bottom-row { margin-top: 9px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .listen-state { min-width: 0; flex: 1; font-size: 10px; color: var(--muted); }
 .hangup { border: 1px solid rgba(255,127,137,.2); background: rgba(255,127,137,.1); color: #ffadb4; border-radius: 11px; padding: 8px 13px; cursor: pointer; font-weight: 720; font-size: 11px; }
+.hold-btn { margin-left: auto; border-radius: 11px; padding: 8px 13px; cursor: pointer; font-weight: 720; font-size: 11px; }
 .hangup:hover { background: rgba(255,127,137,.15); }
 .dashboard { height: 100%; display: flex; flex-direction: column; padding: 22px 17px 17px; min-height: 0; }
 .dashboard-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('agentCall', {
   answer: (id) => ipcRenderer.invoke('agentcall:answer', id),
   snooze: (id, minutes) => ipcRenderer.invoke('agentcall:snooze', { id, minutes }),
   hangup: (id) => ipcRenderer.invoke('agentcall:hangup', id),
+  hold: (id) => ipcRenderer.invoke('agentcall:hold', id),
   setDnd: (value) => ipcRenderer.invoke('agentcall:set-dnd', value),
   submitChoice: (id, choice) => ipcRenderer.invoke('agentcall:submit-choice', { id, choice }),
   submitText: (id, text) => ipcRenderer.invoke('agentcall:submit-text', { id, text }),

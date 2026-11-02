@@ -22,9 +22,12 @@ const MIN_TRANSCRIBED_MS = 350; // whisper_worker.py MIN_UTTERANCE_S: shorter ph
 const HOLD_MS = 8000;          // a lone "espera" while Claude works is delivered as an interrupt after this
 const ECHO_TAIL_MS = 4000;     // after Claude stops speaking, a recognition may still be its echo (Whisper is ~1 s late)
 const MIN_CONFIDENCE = 0.4;    // below this, recognitions are noise/echo guesses ("Orlando" 0.11)
-// With echo cancellation the voice detector is trusted: Claude ducks at the first speech frame and goes
-// silent if the voice lasts this long (or words appear); shorter sounds (a cough) restore the volume.
-const BARGE_CONFIRM_MS = 250;
+// With echo cancellation the voice detector is trusted, but only as a person on the phone would be:
+// a short sound (breath, "ajá", a key) changes nothing, a voice that goes on makes Claude lower its
+// voice, and Claude stops for words (a transcript) or a voice that keeps going this long. Live test
+// 2026-11-02: stopping at 250 ms cut Claude 20 times in four minutes, each time restarting the sentence.
+const DUCK_AFTER_MS = 300;
+const BARGE_CONFIRM_MS = 1500;
 const ACK_TEXT = { vale: 'Vale.', entendido: 'Entendido.', momento: 'Un momento.' };
 
 function fold(text) {
@@ -106,6 +109,7 @@ class VoiceConversation extends EventEmitter {
       this.streamCut = false; // a cut belongs to the call it happened in
       this.replyFrom = 0;     // a round trip never spans a hang-up
       this.streamId = null;
+      this.streamOpen = false; // the controller restarts the stream turn when it speaks in this call
     }
     this.kind = call?.interactionKind || null;
     this.turn = !call ? 'idle'
@@ -124,6 +128,13 @@ class VoiceConversation extends EventEmitter {
 
   // Recognised words still waiting for the end of the turn are sent now instead of being dropped
   // (hang-up, another call, mute). An unfinished partial is not: it was never a confirmed transcript.
+  // The user is about to hang up or step away: what they already said goes to Claude first, while the
+  // call still exists (after the hang-up there is no call left to route it through).
+  flushDraft(reason = 'cuelgas') {
+    this._flushDraft(reason);
+    this._ui();
+  }
+
   _flushDraft(reason) {
     const text = [this.prefix, this.policy ? this.policy.text() : ''].filter(Boolean).join(' ').trim();
     if (!text) return;
@@ -206,8 +217,8 @@ class VoiceConversation extends EventEmitter {
     this._policy().speechStart(this.now());
     this._arm();
     if (this.echoCancelled && this.playing && !this.playing.ack) {
-      this._duck();
       this._clearBargeTimer();
+      this.duckTimer = this.setTimer(() => { this.duckTimer = null; if (this.userSpeaking && this.playing) this._duck(); }, DUCK_AFTER_MS);
       this.bargeTimer = this.setTimer(() => { this.bargeTimer = null; this._bargeIn('voz sostenida'); }, BARGE_CONFIRM_MS);
     }
   }
@@ -310,6 +321,7 @@ class VoiceConversation extends EventEmitter {
   // utterance; once the user cuts it, the rest of that turn is kept for "sigue" instead of spoken.
 
   streamTurnStart() {
+    this.noiseCut = null;
     this.streamCut = false;
     this.streamId = null;
     this.streamOpen = true;
@@ -356,7 +368,9 @@ class VoiceConversation extends EventEmitter {
 
   _clearBargeTimer() {
     if (this.bargeTimer) this.clearTimer(this.bargeTimer);
+    if (this.duckTimer) this.clearTimer(this.duckTimer);
     this.bargeTimer = null;
+    this.duckTimer = null;
   }
 
   _bargeIn(reason) {
@@ -390,7 +404,8 @@ class VoiceConversation extends EventEmitter {
     if (!rest) return;
     this.emit('failure', 'false_speech_start');
     this._debug('ruido sin palabras: Claude sigue hablando');
-    if (cut.streaming && this.streamOpen) { this.streamCut = false; this.streamSentence(rest); }
+    this.streamCut = false;
+    if (cut.streaming && this.streamOpen) this.streamSentence(rest);
     else this._speak(rest);
   }
 
@@ -509,6 +524,7 @@ class VoiceConversation extends EventEmitter {
   }
 
   _commit(text, source) {
+    this.noiseCut = null; // a new turn: an old noise must not bring back what Claude was saying
     const route = this.turn === 'awaitingUser' ? 'answer' : 'steer';
     const commit = {
       callId: this.call?.id || null,
@@ -604,4 +620,4 @@ class VoiceConversation extends EventEmitter {
   _debug(message) { this.emit('debug', message); }
 }
 
-module.exports = { VoiceConversation, classifyUrgency, contentWords, HOLD_MS, ACK_TEXT, BARGE_CONFIRM_MS };
+module.exports = { VoiceConversation, classifyUrgency, contentWords, HOLD_MS, ACK_TEXT, BARGE_CONFIRM_MS, DUCK_AFTER_MS };

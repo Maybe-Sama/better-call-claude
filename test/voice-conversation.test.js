@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { VoiceConversation, classifyUrgency, HOLD_MS, BARGE_CONFIRM_MS } = require('../src/voice/conversation');
+const { VoiceConversation, classifyUrgency, HOLD_MS, BARGE_CONFIRM_MS, DUCK_AFTER_MS } = require('../src/voice/conversation');
 
 // Fake clock + timers; `out` collects every event the conversation emits.
 function harness(options = {}) {
@@ -299,15 +299,35 @@ function speakingCall(h) {
   return id;
 }
 
-test('aec: the voice ducks at once and stops if the user keeps talking', () => {
+test('aec: sustained voice lowers Claude, and stops it if it goes on', () => {
   const h = harness();
   speakingCall(h);
   h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  assert.deepEqual(h.events('tts').map(t => t.action), [], 'a sound alone changes nothing yet');
+  h.advance(DUCK_AFTER_MS);
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck'], 'no waiting for Whisper');
-  h.advance(BARGE_CONFIRM_MS);
+  h.advance(BARGE_CONFIRM_MS - DUCK_AFTER_MS);
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
   const duck = h.events('metric').find(m => m.name === 'bargein.duck_ms');
-  assert.equal(duck.ms, 90, 'from the onset of the voice');
+  assert.equal(duck.ms, DUCK_AFTER_MS + 90, 'from the onset of the voice');
+});
+
+// Live test 2026-11-02 (headphones, AEC): murmurs, breathing and "ajá" cut Claude 20 times in four
+// minutes and every resume started the sentence again.
+test('aec: short sounds while Claude talks never cut or restart it', () => {
+  const h = harness();
+  const id = speakingCall(h);
+  for (let i = 0; i < 20; i += 1) {
+    h.conv.stt({ type: 'speech', state: 'start', utterance: i, onset_ms: 90 });
+    h.advance(i % 2 ? 200 : DUCK_AFTER_MS + 300);
+    h.conv.stt({ type: 'speech', state: 'end', utterance: i, silence_ms: 700, voiced_ms: 400 });
+    h.advance(300);
+    h.conv.stt({ type: 'rejected', utterance: i });
+    h.advance(2000);
+  }
+  assert.ok(!h.events('tts').some(t => t.action === 'stop'));
+  assert.equal(h.events('speak').length, 1, 'never started again');
+  assert.equal(h.conv.playing.id, id);
 });
 
 test('a stop names the utterance it stops (a late stop must not cut the next answer)', () => {
@@ -319,13 +339,13 @@ test('a stop names the utterance it stops (a late stop must not cut the next ans
   assert.equal(stop.id, id);
 });
 
-test('aec: a cough only ducks for a moment', () => {
+test('aec: a longer noise only lowers Claude for a moment', () => {
   const h = harness();
   speakingCall(h);
   const failures = [];
   h.conv.on('failure', f => failures.push(f));
   h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
-  h.advance(120);
+  h.advance(DUCK_AFTER_MS + 200);
   h.conv.stt({ type: 'speech', state: 'end', silence_ms: 60 });
   h.advance(1000);
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'unduck']);
@@ -337,7 +357,7 @@ test('aec: words while ducked stop Claude before the confirmation time', () => {
   const h = harness();
   speakingCall(h);
   h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
-  h.advance(100);
+  h.advance(DUCK_AFTER_MS + 100);
   h.conv.stt({ type: 'partial', text: 'espera' });
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
 });
@@ -493,6 +513,15 @@ test('stream: going back to a call after hanging up hears Claude again (no cut c
   h.conv.setCall(waitingCall({ messages: [], awaitingClaude: true, waiting: false }));
   h.conv.streamSentence('Ya está compilada.');
   assert.ok(streamed.some(s => s.id !== id && s.action === 'append' && s.text === 'Ya está compilada.'));
+});
+
+test('aec stream: once the user sends something, an old noise no longer brings Claude back (#10)', () => {
+  const h = harness();
+  const { streamed, id, noise } = streamingAec(h);
+  noise();
+  h.conv.submitTyped('Mejor cuéntame otra cosa.');
+  h.conv.stt({ type: 'rejected', utterance: 7 });
+  assert.ok(!streamed.some(s => s.id !== id), 'the old answer is not resumed');
 });
 
 test('aec stream: a garbled guess ("Música" 0.35) is noise too', () => {

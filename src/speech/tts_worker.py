@@ -101,6 +101,7 @@ class Speaker:
         self.model_lock = threading.Lock()
         self.current = None
         self.current_id = None  # id of the utterance being produced (speak, ack or stream)
+        self.stopped_ids = collections.deque(maxlen=64)  # utterances told to stop: never (re)started
         self.acks = {}
         self.prepared = collections.OrderedDict()  # normalized text → Prepared (a few, newest last)
         self.stream = None  # {"id", "queue", "stopped"} while Claude's answer is streamed in
@@ -192,7 +193,17 @@ class Speaker:
                 emit({"type": "warning", "message": f"Edge TTS: {exc}"[:200]})
         return ("pcm", self.synth(text))
 
+    def _stale(self, utt_id):
+        # The window's speak for an utterance the main process already stopped (and replaced) can
+        # arrive late: starting it would cut the answer that replaced it.
+        if utt_id and utt_id in self.stopped_ids:
+            emit({"type": "done", "id": utt_id, "chunks": 0, "interrupted": True})
+            return True
+        return False
+
     def stream_start(self, utt_id):
+        if self._stale(utt_id):
+            return
         self.stop()
         stopped = threading.Event()
         st = {"id": utt_id, "queue": queue.Queue(), "stopped": stopped}
@@ -239,6 +250,8 @@ class Speaker:
         # A stop that names an utterance only stops that one: one sent by the window can arrive after
         # the main process already started the next answer, and must not cut it.
         with self.lock:
+            if utt_id:
+                self.stopped_ids.append(utt_id)
             if utt_id and self.current_id and utt_id != self.current_id:
                 return
             cur, self.current = self.current, None
@@ -248,6 +261,8 @@ class Speaker:
             cur.set()
 
     def speak(self, utt_id, text=None, audio=None):
+        if self._stale(utt_id):
+            return
         self.stop()
         cur = threading.Event()
         with self.lock:

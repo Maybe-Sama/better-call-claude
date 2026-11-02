@@ -181,7 +181,7 @@ test('hanging up while Claude works lets it go on, and it calls back with the re
   const pub = broker.getSnapshot().calls[0];
   assert.equal(pub.status, 'ringing', 'Claude calls back');
   const last = pub.messages.at(-1);
-  assert.equal(last.silent, undefined);
+  assert.ok(!last.silent, 'heard when the user picks up');
   assert.equal(last.speech, 'Ya está compilada. Todo funciona.');
   assert.equal(broker.answer(call.id), true);
   assert.equal(broker.getSnapshot().calls[0].waiting, true, 'the conversation goes on');
@@ -202,6 +202,186 @@ test('a permission Claude needs while the user hung up rings with the question',
   broker.answer(call.id);
   broker.submitUserText(call.id, 'sí');
   assert.deepEqual(session.decisions, [{ requestId: 'p3', allow: true, input: { command: 'npm run build' } }]);
+});
+
+// "¿Cómo pongo la llamada en espera para irme a otra llamada sin cerrar y recuperar?"
+test('on hold: nothing closes, nothing rings, and picking it up again goes on', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  ctl.say(call.id, 'Revisa el login.', 'queue');
+  session.busy = true;
+  session.emit('turn-start');
+  assert.equal(broker.hold(call.id), true);
+  await new Promise(r => setImmediate(r));
+  assert.equal(session.closed, false);
+  assert.equal(broker.activeId, null);
+  assert.equal(broker.getSnapshot().calls[0].status, 'onhold');
+  session.emit('assistant-message', { text: 'El login ya funciona.' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  const pub = broker.getSnapshot().calls[0];
+  assert.equal(pub.status, 'onhold', 'on hold never rings');
+  assert.equal(pub.messages.at(-1).speech, 'El login ya funciona.', 'heard on pick-up');
+  assert.equal(broker.answer(call.id), true);
+  assert.equal(ctl.say(call.id, 'Perfecto, súbelo.', 'queue').ok, true);
+  // Idle Claude, on hold again: still nothing closes.
+  broker.hold(call.id);
+  await new Promise(r => setImmediate(r));
+  assert.equal(session.closed, false);
+});
+
+test('putting a call on hold lets a waiting call ring', async () => {
+  const { broker, ctl } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  broker.receivePermission({ session_id: 'other', cwd: 'C:/work/api', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  assert.equal(broker.getSnapshot().calls.find(c => c.sessionId === 'other').status, 'queued');
+  broker.hold(call.id);
+  assert.equal(broker.getSnapshot().calls.find(c => c.sessionId === 'other').status, 'ringing');
+});
+
+test('a prompt while on hold waits in that call without ringing', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  broker.setStreamBusy(call.id, true);
+  broker.hold(call.id);
+  session.emit('permission', { requestId: 'p4', toolName: 'Bash', input: { command: 'npm test' } });
+  const pub = broker.getSnapshot().calls;
+  assert.equal(pub.length, 1);
+  assert.equal(pub[0].status, 'onhold');
+  assert.equal(pub[0].interactionKind, 'permission');
+  broker.answer(call.id);
+  broker.submitUserText(call.id, 'sí');
+  assert.equal(session.decisions[0].allow, true);
+});
+
+test('only controlled calls go on hold', () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const c = broker.receivePermission({ session_id: 's9', cwd: 'C:/x', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(c.id);
+  assert.equal(broker.hold(c.id), false);
+  assert.equal(broker.activeId, c.id);
+});
+
+test('a prompt Claude withdraws while the user is away never ends the conversation', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  broker.setStreamBusy(call.id, true);
+  session.emit('permission', { requestId: 'p6', toolName: 'Bash', input: { command: 'npm test' } });
+  broker.hangup(call.id); // unanswered: Pendientes
+  session.emit('permission-cancelled', { requestId: 'p6' });
+  await new Promise(r => setImmediate(r));
+  assert.equal(session.closed, false, 'Claude goes on');
+  assert.equal(broker.getSnapshot().calls.length, 1);
+  session.emit('permission', { requestId: 'p7', toolName: 'Bash', input: { command: 'npm run build' } });
+  assert.equal(broker.getSnapshot().calls.length, 1, 'a later prompt still finds the conversation');
+  session.busy = false;
+  broker.setStreamBusy(call.id, false);
+  assert.equal(broker.getSnapshot().calls[0].status, 'ringing');
+});
+
+// ── Review (alter ego) of 7fa4481 + aa2f17d ────────────────────────────────────────────────
+
+const tick = () => new Promise(r => setImmediate(r));
+
+test('asking and hanging up at once: Claude was about to start, so the call is kept (#1)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  ctl.say(call.id, 'Compila la web y llámame cuando acabes.', 'queue');
+  broker.hangup(call.id); // before Claude's turn-start
+  await tick();
+  assert.equal(session.closed, false);
+  assert.deepEqual(session.sent, ['Compila la web y llámame cuando acabes.']);
+  assert.equal(broker.getSnapshot().calls[0].status, 'parked');
+});
+
+test('a correction and a hang-up: it rings for the corrected work, not for the interruption (#2)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  let release;
+  session.sendUrgent = (text) => {
+    session.sent.push(text);
+    session.busy = false;
+    session.emit('turn-end', { terminalReason: 'aborted', aborted: true }); // the interrupt lands first
+    return new Promise(r => { release = () => { session.busy = true; r('u9'); }; });
+  };
+  session.busy = true;
+  session.emit('turn-start');
+  broker.hangup(call.id);
+  ctl.say(call.id, 'No, mejor hazlo en otra rama.', 'interrupt');
+  assert.equal(broker.getSnapshot().calls[0].status, 'parked', 'no ring while the correction is on its way');
+  release();
+  await tick();
+  assert.equal(broker.getSnapshot().calls[0].status, 'parked');
+  session.emit('turn-start');
+  session.emit('assistant-message', { text: 'Hecho en una rama nueva.' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  assert.equal(broker.getSnapshot().calls[0].status, 'ringing');
+});
+
+test('two prompts at once are asked one after the other (#4)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.emit('permission', { requestId: 'a', toolName: 'WebFetch', input: { url: 'https://a.example' } });
+  session.emit('permission', { requestId: 'b', toolName: 'WebFetch', input: { url: 'https://b.example' } });
+  assert.equal(broker.getSnapshot().calls.length, 1);
+  assert.equal(session.decisions.length, 0, 'the second does not cancel the first');
+  broker.submitUserText(call.id, 'sí');
+  await tick();
+  assert.deepEqual(session.decisions.map(d => [d.requestId, d.allow]), [['a', true]]);
+  assert.equal(broker.getSnapshot().calls[0].interactionKind, 'permission', 'now the second one');
+  broker.submitUserText(call.id, 'no');
+  assert.deepEqual(session.decisions.map(d => [d.requestId, d.allow]), [['a', true], ['b', false]]);
+});
+
+test('quitting kills a session that does not close in time (#5)', async () => {
+  const { ctl, session } = setup();
+  await ctl.start({ cwd: 'C:/work/app' });
+  const killed = [];
+  session.close = () => new Promise(() => {}); // never answers
+  session.child = { pid: 4242, kill: () => killed.push('child') };
+  session.killTree = (pid) => { killed.push(`tree ${pid}`); };
+  await ctl.closeAll({ timeoutMs: 10 });
+  assert.deepEqual(killed, ['tree 4242', 'child']);
+});
+
+test('picking up again mid-message: first what was missed, then Claude goes on live (#6)', async () => {
+  const { broker, ctl, session, spoken, voice } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm1' });
+  broker.hold(call.id);
+  session.emit('text', { delta: 'Ya he mirado el login. Ahora ' });
+  assert.deepEqual(spoken, []);
+  broker.answer(call.id);
+  await tick();
+  assert.equal(voice.turnStarts, 2, 'the stream turn starts again in the call');
+  assert.deepEqual(spoken, ['Ya he mirado el login.']);
+  session.emit('text', { delta: 'reviso la base de datos. ' });
+  assert.deepEqual(spoken, ['Ya he mirado el login.', 'Ahora reviso la base de datos.']);
+});
+
+test('a session AgentCall drives never makes calls from its own hooks (#7)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  broker.setSessionMode(session.sessionId, 'on'); // e.g. /saul on in that conversation, earlier
+  assert.equal(broker.sessionMode(session.sessionId, ''), 'off');
+  assert.equal(broker.sessionMode(session.sessionId, 'on'), 'on', 'the controller\'s own prompts');
+  broker.hangup(call.id);
+  await tick();
+  assert.equal(broker.sessionMode(session.sessionId, ''), 'on', 'back to normal once AgentCall lets it go');
+});
+
+test('a controlled call that opens while the user is in another call waits on hold (#8)', async () => {
+  const { broker, ctl } = setup();
+  const other = broker.receivePermission({ session_id: 'x1', cwd: 'C:/api', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  broker.answer(other.id);
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  assert.equal(broker.activeId, other.id);
+  assert.equal(broker.getSnapshot().calls.find(c => c.id === call.id).status, 'onhold');
 });
 
 test('hanging up with a prompt unanswered keeps it in Pendientes (Claude waits for it)', async () => {

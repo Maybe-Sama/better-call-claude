@@ -809,7 +809,9 @@ function registerIpc() {
   ipcMain.handle('agentcall:get-state', () => broker.getSnapshot());
   ipcMain.handle('agentcall:answer', (_e, id) => { log('UI: contestar'); return broker.answer(id); });
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
-  ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); return broker.hangup(id); });
+  // What the user already said goes to Claude before the call is gone (after it there is nothing to route it).
+  ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); if (id === broker.activeId) voice.flushDraft('cuelgas'); return broker.hangup(id); });
+  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); if (id === broker.activeId) voice.flushDraft('pones la llamada en espera'); return broker.hold(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });
   ipcMain.handle('agentcall:submit-choice', (_e, { id, choice }) => {
     log(`UI: botón ${Array.isArray(choice) ? choice.join(' + ') : choice}`);
@@ -854,9 +856,17 @@ app.whenReady().then(() => {
   app.on('activate', () => showWindow({ focus: true }));
 });
 
-app.on('before-quit', () => {
+let streamsClosed = false;
+app.on('before-quit', (event) => {
+  // Controlled sessions are closed (or killed) before AgentCall goes: left alone, a Claude would go
+  // on using tools with nobody on the call.
+  if (streamCalls?.calls.size && !streamsClosed) {
+    event.preventDefault();
+    streamsClosed = true;
+    streamCalls.closeAll().catch(() => {}).finally(() => app.quit());
+    return;
+  }
   quitting = true;
-  streamCalls?.closeAll();
   stt?.stop();
   tts.stop();
   // Release every held hook so no Claude session stays blocked on a closed AgentCall.

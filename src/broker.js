@@ -135,6 +135,9 @@ class CallBroker extends EventEmitter {
     // launcher (X-AgentCall-Mode header) or defaultMode.
     this.defaultMode = defaultMode === 'on' ? 'on' : 'off';
     this.sessionModes = new Map();
+    // Sessions AgentCall drives itself (controlled calls): their own plugin hooks never make calls,
+    // whatever /saul says for that session; only the controller's prompts (hint 'on') do.
+    this.driven = new Set();
   }
 
   setDnd(value) {
@@ -155,6 +158,7 @@ class CallBroker extends EventEmitter {
   // stale (the user chose the terminal), so release it and let Claude Code continue normally.
   // Is AgentCall enabled for this session? hint: value of the X-AgentCall-Mode header ("on"/"off"/"").
   sessionMode(sessionId, hint = '') {
+    if (sessionId && this.driven.has(sessionId)) return hint === 'on' ? 'on' : 'off';
     if (sessionId && this.sessionModes.has(sessionId)) {
       // Least-recently-used order: sessions still in use never reach the eviction end of the map.
       const mode = this.sessionModes.get(sessionId);
@@ -620,6 +624,9 @@ class CallBroker extends EventEmitter {
   // Idle Claude = waiting for a free reply ('stop'); busy Claude = working. Its permission and
   // question prompts arrive through receivePermission/receiveAskUser and merge into it as usual.
 
+  driveSession(sessionId) { if (sessionId) this.driven.add(sessionId); }
+  releaseSession(sessionId) { this.driven.delete(sessionId); }
+
   openStreamCall({ sessionId, cwd, title } = {}) {
     this._session({ session_id: sessionId, cwd });
     const call = this._newCall({
@@ -634,6 +641,12 @@ class CallBroker extends EventEmitter {
       messages: [],
       resolved: false,
     });
+    // The user answered another call while Claude was starting: that one is not taken over.
+    if (this.activeId && this.calls.has(this.activeId)) {
+      call.status = 'onhold';
+      this._changed('hold', { id: call.id });
+      return call;
+    }
     for (const other of this.calls.values()) {
       if (other.id !== call.id && other.status === 'ringing') this._moveToQueued(other);
     }
@@ -655,10 +668,25 @@ class CallBroker extends EventEmitter {
     this._changed();
   }
 
+  // "En espera": the user steps away from a controlled call (another call, a break) without ending it.
+  // Nothing closes and nothing rings: Claude goes on working, its prompts wait in the call, and the
+  // user picks it up again from the list (answer). A call waiting in the queue can ring meanwhile.
+  hold(id = this.activeId) {
+    const call = this.calls.get(id);
+    if (!call?.stream || this.activeId !== id) return false;
+    this.activeId = null;
+    call.status = 'onhold';
+    call.updatedAt = this.now();
+    this._ringNextIfPossible();
+    this._changed('hold', { id });
+    return true;
+  }
+
   // Claude finished (or stopped) while the user had hung up: it calls the user back.
+  // A callback the user missed (Pendientes) rings again when Claude finishes something new.
   ringStreamCall(callId) {
     const call = this.calls.get(callId);
-    if (!call?.stream || call.status !== 'parked') return false;
+    if (!call?.stream || !['parked', 'pending'].includes(call.status)) return false;
     call.updatedAt = this.now();
     this._enqueueOrRing(call);
     return true;
@@ -736,18 +764,21 @@ class CallBroker extends EventEmitter {
 
     const active = this._active();
     if (active && active.sessionId === sessionId) {
-      Object.assign(active, fields, { updatedAt: this.now() });
+      Object.assign(active, fields, { updatedAt: this.now() }, active.stream ? { type: 'stream' } : {});
       active.messages.push(fullMessage);
       this._changed('message', { id: active.id, message: fullMessage });
       return active;
     }
-    // A controlled conversation the user hung up on while Claude worked: the prompt rings that call.
-    const parked = [...this.calls.values()].find(c => c.stream && c.status === 'parked' && c.sessionId === sessionId);
-    if (parked) {
-      Object.assign(parked, fields, { updatedAt: this.now() });
-      parked.messages.push(fullMessage);
-      this._enqueueOrRing(parked);
-      return parked;
+    // A controlled conversation the user stepped away from: the prompt goes into that call. Hung up
+    // while Claude worked, it rings; on hold, it waits there until the user picks the call up again.
+    // Already ringing, queued or snoozed, it keeps going; in Pendientes, it rings for the new prompt.
+    const away = [...this.calls.values()].find(c => c.stream && c.sessionId === sessionId);
+    if (away) {
+      Object.assign(away, fields, { type: 'stream', updatedAt: this.now() });
+      away.messages.push(fullMessage);
+      if (['parked', 'pending'].includes(away.status)) this._enqueueOrRing(away);
+      else this._changed('message', { id: away.id, message: fullMessage });
+      return away;
     }
 
     const call = this._newCall({
@@ -799,6 +830,21 @@ class CallBroker extends EventEmitter {
       call.awaitingClaude = false;
       if (note) call.messages.push({ role: 'system', text: note, at: this.now(), kind: 'note' });
       call.updatedAt = this.now();
+      this._changed('message', { id: call.id });
+    } else if (call.stream) {
+      // A controlled conversation outlives its prompts (deleting it would close Claude): the prompt
+      // goes, the call stays. One that was only in Pendientes or ringing for the prompt goes back to
+      // "hung up while Claude works", so it calls back when Claude is done.
+      call.interactionKind = call.claudeBusy ? null : 'stop';
+      call.awaitingClaude = Boolean(call.claudeBusy);
+      call.updatedAt = this.now();
+      if (['pending', 'ringing', 'queued'].includes(call.status)) {
+        const wasRinging = call.status === 'ringing';
+        this._clearRingTimer(call.id);
+        call.status = 'parked';
+        if (!call.claudeBusy) this._enqueueOrRing(call);
+        else if (wasRinging) this._ringNextIfPossible();
+      }
       this._changed('message', { id: call.id });
     } else {
       const wasRinging = call.status === 'ringing';
