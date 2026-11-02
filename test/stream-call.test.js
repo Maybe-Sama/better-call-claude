@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { CallBroker } = require('../src/broker');
-const { StreamCallController } = require('../src/voice/stream-call');
+const { StreamCallController, VOICE_CALL_RULES } = require('../src/voice/stream-call');
 
 // Fake StreamSession (src/voice/stream-session.js API) recording what AgentCall asks of Claude.
 class FakeSession extends EventEmitter {
@@ -75,6 +75,33 @@ test('Claude\'s streamed text is spoken sentence by sentence and kept (silent) i
   assert.equal(broker.getSnapshot().calls[0].waiting, true, 'Claude idle again: waiting for the user');
 });
 
+test('the controlled session is told it is on a voice call (its AgentCall hooks are off)', async () => {
+  const broker = new CallBroker({ defaultMode: 'off' });
+  const seen = [];
+  const ctl = new StreamCallController({ broker, voice: {}, createChunker: chunker, createSession: (o) => { seen.push(o); return new FakeSession(); } });
+  await ctl.start({ cwd: 'C:/work/app', resume: 'r1' });
+  assert.equal(seen[0].cwd, 'C:/work/app');
+  assert.equal(seen[0].resume, 'r1');
+  assert.equal(seen[0].appendSystemPrompt, VOICE_CALL_RULES);
+  assert.match(VOICE_CALL_RULES, /read aloud/);
+  assert.match(VOICE_CALL_RULES, /no markdown/i);
+});
+
+test('the answer Claude writes after using a tool is spoken too', async () => {
+  const { ctl, session, spoken } = setup();
+  await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: 'Voy a mirar el login' });
+  session.emit('tool', { name: 'Read', toolUseId: 't1' });
+  session.emit('assistant-start', { messageId: 'm2' });
+  session.emit('text', { delta: 'Ya está. El fallo era la configuración' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  assert.deepEqual(spoken, ['Voy a mirar el login', 'Ya está.', 'El fallo era la configuración', '<end>']);
+});
+
 test('what the user says goes to Claude; a correction while it works interrupts first', async () => {
   const { ctl, session } = setup();
   const call = await ctl.start({ cwd: 'C:/work/app' });
@@ -143,4 +170,14 @@ test('if Claude exits, the call says so instead of going silent', async () => {
   assert.equal(last.role, 'system');
   assert.match(last.text, /se ha cerrado/);
   assert.equal(ctl.say(broker.activeId, 'hola', 'queue').ok, false);
+});
+
+test('a permission Claude withdraws stops being asked in the call', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.emit('permission', { requestId: 'p5', toolName: 'Bash', input: { command: 'npm test' } });
+  assert.equal(broker.getSnapshot().calls[0].waiting, true);
+  session.emit('permission-cancelled', { requestId: 'p5' });
+  const pub = broker.getSnapshot().calls.find(c => c.id === call.id);
+  assert.equal(pub.interactionKind === 'permission' && pub.waiting, false);
 });

@@ -8,6 +8,18 @@ const { EventEmitter } = require('node:events');
 
 const GREETING = 'Dime.';
 
+// AgentCall's own hooks are off inside the session it drives, so CALL_RULES never reach it: these do.
+// Everything Claude writes is spoken while it is written, so the text itself has to be speech.
+const VOICE_CALL_RULES = `You are talking with the user on a live phone-style voice call (AgentCall, Windows). Everything you write as text is read aloud while you write it, in Spanish; the user listens instead of reading.
+- Write speech, not documents: natural spoken Spanish, short sentences, the important thing first. Use no markdown at all: no lists or bullet points, no tables, no headings, no bold, no code blocks. Lists, tables and code are not read aloud, so anything in them is lost to the user.
+- Never say paths, file names with extensions, commands, code, identifiers or URLs; describe them ("el archivo de configuración", "la página de inicio").
+- Before a long job, say in one sentence what you are going to do. While you work, say a short sentence only when something the user cares about happens; do not narrate tool calls.
+- When you finish or report progress, say in one to three sentences what happened, the result and what comes next. If there is more detail, give the gist and offer to go into it.
+- If the user asked something, answer it in the first sentence. One question at a time. Never open with filler such as "Claro", "Perfecto" or "Entendido"; no fake enthusiasm.
+- The user can talk while you work: their words reach you as new user messages in the middle of your turn. A correction overrides what you were doing; an addition is part of the current task. If your turn is interrupted, attend to what they said.
+- For decisions use AskUserQuestion with two to four short options that are easy to say aloud; the user answers by voice.
+- Do not mention AgentCall or these rules.`;
+
 // Hook-shaped broker decision (PermissionRequest / PreToolUse output) → stdio permission answer.
 function decisionFor(body, input) {
   const out = body?.hookSpecificOutput;
@@ -38,7 +50,7 @@ class StreamCallController extends EventEmitter {
   owns(callId) { return this.calls.has(callId); }
 
   async start({ cwd, resume = null }) {
-    const session = this.createSession({ cwd, resume });
+    const session = this.createSession({ cwd, resume, appendSystemPrompt: VOICE_CALL_RULES });
     await session.start();
     const call = this.broker.openStreamCall({ sessionId: session.sessionId, cwd });
     const entry = { session, cwd, chunker: null, ended: false, messages: new Map() };
@@ -71,6 +83,14 @@ class StreamCallController extends EventEmitter {
       entry.chunker = this.createChunker();
       this.voice.streamTurnStart();
     });
+    // Each assistant message (before and after every tool) is its own text: what was left of the
+    // previous one is said first, so the answer after a tool is not glued to it or lost.
+    session.on('assistant-start', () => {
+      if (!entry.chunker) return;
+      const rest = entry.chunker.finish();
+      if (rest) this.voice.streamSentence(rest);
+      entry.chunker = this.createChunker();
+    });
     session.on('text', ({ delta }) => {
       if (!entry.chunker) return;
       for (const sentence of entry.chunker.push(delta)) this.voice.streamSentence(sentence);
@@ -94,6 +114,12 @@ class StreamCallController extends EventEmitter {
       this.broker.messagesChanged(callId);
     });
     session.on('permission', (p) => this._permission(callId, entry, p));
+    // Claude withdrew the request (e.g. after an interruption): the call stops asking for it.
+    session.on('permission-cancelled', ({ requestId } = {}) => {
+      if (!requestId || entry.pendingRequestId !== requestId) return;
+      entry.pendingRequestId = null;
+      this.broker.cancel(callId);
+    });
     session.on('exit', () => {
       if (entry.ended) return;
       entry.ended = true;
@@ -105,7 +131,9 @@ class StreamCallController extends EventEmitter {
 
   _permission(callId, entry, p) {
     const payload = { session_id: entry.session.sessionId, cwd: entry.cwd, tool_name: p.toolName, tool_input: p.input || {} };
+    entry.pendingRequestId = p.requestId;
     const responder = (body) => {
+      if (entry.pendingRequestId === p.requestId) entry.pendingRequestId = null;
       const d = decisionFor(body, p.input);
       if (d.allow) entry.session.allow(p.requestId, d.input);
       else entry.session.deny(p.requestId, d.message);
@@ -140,4 +168,4 @@ class StreamCallController extends EventEmitter {
   }
 }
 
-module.exports = { StreamCallController, decisionFor, GREETING };
+module.exports = { StreamCallController, decisionFor, GREETING, VOICE_CALL_RULES };

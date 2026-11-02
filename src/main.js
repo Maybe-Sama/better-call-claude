@@ -22,7 +22,7 @@ const CONFIG_KEYS = {
   defaultMode: 'AGENTCALL_DEFAULT_MODE',
   ttsProvider: 'AGENTCALL_TTS_PROVIDER', edgeVoice: 'AGENTCALL_EDGE_VOICE', edgeRate: 'AGENTCALL_EDGE_RATE',
   micGain: 'AGENTCALL_MIC_GAIN', speechThreshold: 'AGENTCALL_SPEECH_THRESHOLD', whisperBackend: 'AGENTCALL_WHISPER_BACKEND',
-  voiceMetrics: 'AGENTCALL_VOICE_METRICS', capture: 'AGENTCALL_CAPTURE',
+  voiceMetrics: 'AGENTCALL_VOICE_METRICS', capture: 'AGENTCALL_CAPTURE', streamModel: 'AGENTCALL_STREAM_MODEL',
 };
 try {
   const config = JSON.parse(fs.readFileSync(path.join(process.env.LOCALAPPDATA || '', 'AgentCall', 'config.json'), 'utf8'));
@@ -699,7 +699,7 @@ function streamController() {
   streamCalls = new StreamCallController({
     broker,
     voice,
-    createSession: ({ cwd, resume }) => new StreamSession({ cwd, resume }),
+    createSession: ({ cwd, resume, appendSystemPrompt }) => new StreamSession({ cwd, resume, appendSystemPrompt, model: process.env.AGENTCALL_STREAM_MODEL || null }),
     createChunker: () => new SpeechChunker(),
     log,
   });

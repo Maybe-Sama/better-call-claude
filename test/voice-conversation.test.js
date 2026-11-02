@@ -437,6 +437,74 @@ test('stream: after the user cuts Claude, later sentences are kept for "sigue", 
   assert.equal(h.events('speak').at(-1).text, 'Google funciona. Apple falla por la configuración.');
 });
 
+// Live test 2026-11-02: switching windows (clicks, keys) cut Claude for the rest of a long turn.
+function streamingAec(h) {
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Uso la skill de brainstorming.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Uso la skill de brainstorming.' });
+  const noise = () => {
+    h.conv.stt({ type: 'speech', state: 'start', utterance: 7, onset_ms: 90 });
+    h.advance(BARGE_CONFIRM_MS + 50);
+    h.conv.stt({ type: 'speech', state: 'end', utterance: 7, silence_ms: 700, voiced_ms: 400 });
+  };
+  return { streamed, id, noise };
+}
+
+test('aec stream: a noise with no words that cut Claude lets it go on talking', () => {
+  const h = harness();
+  const failures = [];
+  h.conv.on('failure', f => failures.push(f));
+  const { streamed, id, noise } = streamingAec(h);
+  noise();
+  assert.ok(h.events('tts').some(t => t.action === 'stop'), 'the cut itself still happens at once');
+  h.conv.streamSentence('Primero exploro el proyecto.');
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.advance(400);
+  h.conv.stt({ type: 'rejected', utterance: 7 });
+  const again = streamed.filter(s => s.id !== id);
+  assert.equal(again[0].action, 'start');
+  assert.equal(again[1].text, 'Uso la skill de brainstorming. Primero exploro el proyecto.', 'from the sentence that was cut');
+  h.conv.streamSentence('El agente ya está mirando.');
+  assert.equal(streamed.at(-1).text, 'El agente ya está mirando.', 'the rest of the turn is spoken again');
+  assert.equal(streamed.at(-1).id, again[0].id);
+  assert.deepEqual(failures, ['false_speech_start']);
+});
+
+test('aec stream: a garbled guess ("Música" 0.35) is noise too', () => {
+  const h = harness();
+  const { streamed, id, noise } = streamingAec(h);
+  noise();
+  h.advance(400);
+  h.conv.stt({ type: 'final', utterance: 7, text: 'Música', confidence: 0.35 });
+  assert.ok(streamed.some(s => s.id !== id && s.action === 'start'));
+});
+
+test('aec stream: real words keep Claude quiet and wait for the user', () => {
+  const h = harness();
+  const { streamed, id, noise } = streamingAec(h);
+  noise();
+  h.advance(400);
+  h.conv.stt({ type: 'final', utterance: 7, text: 'Espera, espera.', confidence: 0.9 });
+  h.conv.streamSentence('Primero exploro el proyecto.');
+  assert.equal(streamed.filter(s => s.id !== id).length, 0);
+});
+
+test('aec: a noise too short to be transcribed resumes as soon as it ends', () => {
+  const h = harness();
+  const id = speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 3, onset_ms: 90 });
+  h.advance(BARGE_CONFIRM_MS + 20);
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 3, silence_ms: 700, voiced_ms: 300 });
+  assert.equal(h.events('speak').at(-1).text, 'He terminado el cambio.');
+  assert.equal(h.events('speak').length, 2);
+});
+
 test('echo is judged by the phrase each transcript belongs to', () => {
   const h = harness();
   h.conv.setCall(waitingCall({ messages: [assistant('¿Prefieres Supabase o Neon para la base de datos?')] }));

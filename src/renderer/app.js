@@ -753,6 +753,7 @@ const METRIC_LABELS = {
   'stt.final_ms': 'Fin de tu voz → texto final',
   'turn.endpoint_ms': 'Fin de tu voz → envío',
   'tts.first_audio_ms': 'Texto de Claude → su voz',
+  'turn.roundtrip_ms': 'Fin de tu voz → voz de Claude',
 };
 let metricsTimer = null;
 async function renderMetricsPanel(panel) {

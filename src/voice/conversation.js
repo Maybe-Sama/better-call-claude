@@ -134,8 +134,8 @@ class VoiceConversation extends EventEmitter {
     if (ev.type === 'speech' && ev.state === 'start') this._speechStart(ev);
     else if (ev.type === 'speech' && ev.state === 'end') this._speechEnd(ev);
     else if (ev.type === 'partial') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._partial(String(ev.text || '')); }
-    else if (ev.type === 'final') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._final(String(ev.text || ''), typeof ev.confidence === 'number' ? ev.confidence : 1); }
-    else if (ev.type === 'rejected') this._final('', 0); // the phrase had no words
+    else if (ev.type === 'final') { this._utteranceStart = this.phraseStarts.get(ev.utterance); this._final(String(ev.text || ''), typeof ev.confidence === 'number' ? ev.confidence : 1, ev.utterance); }
+    else if (ev.type === 'rejected') this._final('', 0, ev.utterance); // the phrase had no words
     else return;
     this._ui();
   }
@@ -149,7 +149,12 @@ class VoiceConversation extends EventEmitter {
     const cur = this.playing;
     if (!cur || ev.id !== cur.id) return;
     if (ev.type === 'chunk') {
-      if (!cur.chunks.size && !cur.ack) this._metric('tts.first_audio_ms', this.now() - cur.startedAt);
+      if (!cur.chunks.size && !cur.ack) {
+        this._metric('tts.first_audio_ms', this.now() - cur.startedAt);
+        // The user finished their turn → Claude's voice answers (whole round trip, SPEC §9).
+        if (this.replyFrom) this._metric('turn.roundtrip_ms', this.now() - this.replyFrom);
+        this.replyFrom = 0;
+      }
       cur.chunks.set(ev.seq, String(ev.text || ''));
       cur.current = ev.seq;
     } else if (ev.type === 'end') {
@@ -186,6 +191,7 @@ class VoiceConversation extends EventEmitter {
     this.userSpeaking = true;
     this.deferredCommit = false; // the user went on talking: the turn is not over
     this.speechStartAt = this.now() - (Number(ev.onset_ms) || 0);
+    this.utterance = ev.utterance ?? null;
     this.phraseStartAt = this.speechStartAt; // kept across commits: decides whether a phrase can be echo
     if (ev.utterance != null) {
       this.phraseStarts.set(ev.utterance, this.speechStartAt); // a transcript is judged by its own phrase
@@ -218,6 +224,7 @@ class VoiceConversation extends EventEmitter {
     const expectFinal = !ev.cancelled && (ev.voiced_ms == null || ev.voiced_ms >= MIN_TRANSCRIBED_MS);
     this._policy().speechEnd(this.now(), { expectFinal, silenceMs: Number(ev.silence_ms) || 0 });
     this._arm();
+    if (!expectFinal && this._noiseCutBy(ev.utterance)) this._resumeAfterNoise(); // no transcript will come
     if (!this._draftText() && this.pendingSpeak) this._flushPendingSpeak();
     this._armHold();
   }
@@ -235,7 +242,7 @@ class VoiceConversation extends EventEmitter {
     this._arm();
   }
 
-  _final(text, confidence) {
+  _final(text, confidence, utterance = null) {
     this.partialText = '';
     if (this.speechEndAt) this._metric('stt.final_ms', this.now() - this.speechEndAt);
     const policy = this._policy();
@@ -245,9 +252,11 @@ class VoiceConversation extends EventEmitter {
       policy.final(this.now(), '', 0); // re-times the turn without adding anything
       this._arm();
       this._armHold();
+      if (this._noiseCutBy(utterance)) this._resumeAfterNoise();
       return;
     }
     this.lowConfidence = false;
+    this.noiseCut = null; // the user really spoke: the cut stands ("sigue" brings Claude back)
     if (this.speaking()) this._bargeIn('final');
     if (this.typing) {
       this.emit('append', { text });
@@ -299,6 +308,7 @@ class VoiceConversation extends EventEmitter {
   streamTurnStart() {
     this.streamCut = false;
     this.streamId = null;
+    this.streamOpen = true;
   }
 
   streamSentence(sentence) {
@@ -323,6 +333,7 @@ class VoiceConversation extends EventEmitter {
   streamTurnEnd() {
     if (this.playing && this.playing.id === this.streamId) this.emit('speak-stream', { id: this.streamId, action: 'end' });
     this.streamId = null;
+    this.streamOpen = false;
   }
 
   _flushPendingSpeak() {
@@ -352,7 +363,31 @@ class VoiceConversation extends EventEmitter {
     if (this.speechStartAt) this._metric('bargein.stop_ms', this.now() - this.speechStartAt);
     if (!this.playing.ack) this.interrupted = { ...this.playing, chunks: new Map(this.playing.chunks) };
     if (this.playing.streaming) this.streamCut = true;
+    // Until the phrase that cut Claude turns out to have words, the cut may be a click or a key.
+    this.noiseCut = reason === 'final' || !this.interrupted ? null
+      : { interrupted: this.interrupted, utterance: this.utterance, streaming: Boolean(this.playing.streaming) };
     this._stopTts();
+  }
+
+  _noiseCutBy(utterance) {
+    const cut = this.noiseCut;
+    return Boolean(cut) && (cut.utterance == null || utterance == null || cut.utterance === utterance);
+  }
+
+  // What cut Claude had no words (keys, clicks, a chair, music, a garbled guess): a person on the
+  // phone would just go on, so Claude picks up again from the sentence it was cut in.
+  _resumeAfterNoise() {
+    const cut = this.noiseCut;
+    this.noiseCut = null;
+    // Anything that happened since (new words, a new message, "sigue") wins over resuming.
+    if (!cut || this.interrupted !== cut.interrupted || this.playing || this.userSpeaking || this._draftText()) return;
+    const rest = this._remainder(this.interrupted);
+    this.interrupted = null;
+    if (!rest) return;
+    this.emit('failure', 'false_speech_start');
+    this._debug('ruido sin palabras: Claude sigue hablando');
+    if (cut.streaming && this.streamOpen) { this.streamCut = false; this.streamSentence(rest); }
+    else this._speak(rest);
   }
 
   _stopTts() {
@@ -481,6 +516,7 @@ class VoiceConversation extends EventEmitter {
       source,
     };
     if (source === 'voice' && this.speechEndAt) this._metric('turn.endpoint_ms', this.now() - this.speechEndAt);
+    this.replyFrom = source === 'voice' && this.speechEndAt ? this.speechEndAt : this.now();
     this._debug(`envía (${route}${commit.urgency ? ` ${commit.urgency}` : ''}, ${source}): «${text}»`);
     this._resetDraft();
     if (route === 'answer') this.pendingSpeak = null; // the user moved on: an unheard older message is stale
