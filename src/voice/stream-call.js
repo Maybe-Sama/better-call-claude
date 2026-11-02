@@ -53,7 +53,10 @@ class StreamCallController extends EventEmitter {
 
   // Someone is on the line: Claude's text is spoken as it streams. Otherwise (hung up, on hold,
   // ringing back, in Pendientes) it is kept, and caught up on when the user is back.
-  _onLine(callId) { return this.broker.calls.get(callId)?.status === 'active'; }
+  _onLine(callId) {
+    if (this.broker.calls.get(callId)?.status !== 'active') return false;
+    return !(this.voice.leaving && this.voice.call?.id === callId); // pressing Colgar: already gone
+  }
 
   async start({ cwd, resume = null }) {
     const session = this.createSession({ cwd, resume, appendSystemPrompt: VOICE_CALL_RULES });
@@ -128,6 +131,7 @@ class StreamCallController extends EventEmitter {
     // Each assistant message (before and after every tool) is its own text: what was left of the
     // previous one is said first, so the answer after a tool is not glued to it or lost.
     session.on('assistant-start', () => {
+      entry.inMessage = true;
       if (!entry.chunker) return;
       const rest = entry.chunker.finish();
       if (rest) this._say(callId, entry, [rest]);
@@ -138,6 +142,7 @@ class StreamCallController extends EventEmitter {
       this._say(callId, entry, entry.chunker.push(delta));
     });
     session.on('assistant-message', ({ text, aborted }) => {
+      entry.inMessage = false;
       if (!text || aborted) return;
       // Kept in the call, not read again: it was spoken while streamed, or it is caught up on later.
       const msg = this.broker.addCallMessage(callId, { role: 'assistant', text, speech: '', silent: true, kind: 'stream' });
@@ -153,6 +158,7 @@ class StreamCallController extends EventEmitter {
       entry.voiceTurn = false;
       entry.chunker = null;
       entry.turnOpen = false;
+      entry.inMessage = false;
       // Nobody heard how it ended: the last message is what the user hears on picking up.
       const last = entry.turnMsgs.at(-1);
       if (!this._onLine(callId) && last && (entry.missed.length || entry.msgMissed || entry.offline.length)) {
@@ -203,8 +209,19 @@ class StreamCallController extends EventEmitter {
   unheard(callId, text) {
     const entry = this.calls.get(callId);
     if (!entry || !text) return;
-    if (entry.turnOpen) { entry.missed.push(text); return; }
     const call = this.broker.calls.get(callId);
+    // A question cut off: it is asked again whole when the user is back.
+    if (call?.responder && !call.resolved) {
+      const asked = [...call.messages].reverse().find(m => m.role === 'assistant');
+      if (asked) { asked.rev = (asked.rev || 0) + 1; this.broker.messagesChanged(callId); }
+      return;
+    }
+    if (entry.turnOpen) {
+      // Still being written: the whole message is caught up on once it ends (no half repeated).
+      if (entry.inMessage) entry.msgMissed = true;
+      else entry.missed.push(text);
+      return;
+    }
     const last = call && [...call.messages].reverse().find(m => m.role === 'assistant');
     if (!last) return;
     Object.assign(last, { silent: false, speech: text, rev: (last.rev || 0) + 1 });

@@ -411,6 +411,38 @@ test('leaving a call mid-sentence hands back what Claude had not said yet (revie
   assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.' }]);
 });
 
+test('Colgar: Claude goes quiet at once, its unheard rest is handed back, nothing new is said (round 3 #1, #6)', () => {
+  const h = harness();
+  const unheard = [];
+  const streamed = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(waitingCall({ messages: [assistant('Falla la cookie. Lo arreglo ahora.')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Falla la cookie.' });
+  h.conv.leave();
+  assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.' }]);
+  assert.ok(h.events('tts').some(t => t.action === 'stop'));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Ya está arreglado.');
+  assert.equal(streamed.length, 0, 'nothing is said while the call is leaving');
+  h.conv.cancelLeave();
+  h.conv.streamSentence('Ya está arreglado.');
+  assert.equal(streamed.length, 2, 'the call stayed: Claude talks again');
+});
+
+test('a new phrase owns the lowered voice: an older hold never raises it mid-phrase (round 3 #5)', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(DUCK_AFTER_MS + 100);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700, voiced_ms: 450 }); // held for its transcript
+  h.advance(500);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 2, onset_ms: 90 });
+  h.advance(2900); // phrase 1's hold would have expired here
+  assert.ok(!h.events('tts').some(t => t.action === 'unduck'), 'still low while the user talks');
+});
+
 test('settle waits for the transcript of what the user was saying (review round 2 #3)', async () => {
   let now = 0;
   const conv = new VoiceConversation({ now: () => now, setTimer: (fn, ms) => setTimeout(() => { now += ms; fn(); }, 1), clearTimer: id => clearTimeout(id) });

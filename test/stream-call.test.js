@@ -432,6 +432,34 @@ test('what the voice had not said when the user left is said on picking up (#4)'
   assert.equal(last.rev, 1, 'a new revision: the voice says it although it saw the message before');
 });
 
+test('unheard rest of a message still being written: caught up once, whole, never half twice (round 3 #4)', async () => {
+  const { broker, ctl, session, spoken } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: 'Uno. Dos. ' });
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'Dos.');
+  session.emit('text', { delta: 'Tres. ' });
+  session.emit('assistant-message', { text: 'Uno. Dos. Tres.' });
+  spoken.length = 0;
+  broker.answer(call.id);
+  await tick();
+  assert.deepEqual(spoken, ['Uno. Dos. Tres.']);
+});
+
+test('a question cut by En espera is asked again whole on picking up (round 3 #1)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'npm test' } });
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'el resto de la pregunta');
+  const asked = broker.getSnapshot().calls[0].messages.at(-1);
+  assert.equal(asked.rev, 1);
+  assert.notEqual(asked.speech, 'el resto de la pregunta', 'the whole question, not its tail');
+});
+
 test('"Terminar" ends a conversation from the list, even while Claude works (#5)', async () => {
   const { broker, ctl, session } = setup();
   const call = await ctl.start({ cwd: 'C:/work/app' });

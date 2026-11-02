@@ -90,6 +90,7 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .card-end:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .hold-btn { margin-left: auto; border-radius: 11px; padding: 8px 13px; cursor: pointer; font-weight: 720; font-size: 11px; }
 .hangup:hover { background: rgba(255,127,137,.15); }
+.hangup:disabled, .hold-btn:disabled { opacity: .6; cursor: default; }
 .dashboard { height: 100%; display: flex; flex-direction: column; padding: 22px 17px 17px; min-height: 0; }
 .dashboard-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
 .dashboard h1 { margin: 0; font-size: 23px; }
@@ -114,7 +115,10 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .call-card.completion { border-left: 2px solid rgba(137,174,252,.45); }
 .call-card.interaction { border-left: 2px solid rgba(114,224,166,.45); }
 .call-card.error { border-left: 2px solid rgba(255,127,137,.45); }
-.card-action { float: right; color: var(--green); font-weight: 700; }
+.card-action { float: right; color: var(--green); font-weight: 700; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.card-action:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 4px; }
+.card-end.armed { background: rgba(255,127,137,.18); }
+.call-card { cursor: pointer; }
 .call-card:focus-visible, .primary:focus-visible, .secondary:focus-visible, .hangup:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .phone-orbit::before, .phone-orbit::after { animation: none; } }
 

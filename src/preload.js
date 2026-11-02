@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('agentCall', {
   hangup: (id) => ipcRenderer.invoke('agentcall:hangup', id),
   hold: (id) => ipcRenderer.invoke('agentcall:hold', id),
   dismiss: (id) => ipcRenderer.invoke('agentcall:dismiss', id),
+  ttsFallback: (on) => ipcRenderer.send('agentcall:tts-fallback', Boolean(on)),
   setDnd: (value) => ipcRenderer.invoke('agentcall:set-dnd', value),
   submitChoice: (id, choice) => ipcRenderer.invoke('agentcall:submit-choice', { id, choice }),
   submitText: (id, text) => ipcRenderer.invoke('agentcall:submit-text', { id, text }),

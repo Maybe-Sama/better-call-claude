@@ -107,6 +107,7 @@ class VoiceConversation extends EventEmitter {
         if (unheard) this.emit('unheard', { callId: previous, text: unheard });
       }
       if (this.playing) this._stopTts();
+      this.leaving = false;
       this._resetDraft();
       this.interrupted = null;
       this.pendingSpeak = null;
@@ -134,6 +135,26 @@ class VoiceConversation extends EventEmitter {
 
   // Recognised words still waiting for the end of the turn are sent now instead of being dropped
   // (hang-up, another call, mute). An unfinished partial is not: it was never a confirmed transcript.
+  // The user pressed Colgar / En espera: Claude goes quiet now (what it had not said yet is handed back
+  // to be heard later) while the call waits a moment for what the user was still saying.
+  leave() {
+    if (!this.call) return;
+    if (this.playing && !this.playing.ack) {
+      const unheard = this._remainder(this.playing);
+      if (unheard) this.emit('unheard', { callId: this.call.id, text: unheard });
+    }
+    if (this.playing) this._stopTts();
+    this.pendingSpeak = null;
+    this.leaving = true;
+    this._ui();
+  }
+
+  // Colgar / En espera did not happen after all (the call is still the active one).
+  cancelLeave() {
+    this.leaving = false;
+    this._ui();
+  }
+
   // Resolves once the user is not mid-phrase and no transcript is still coming (or after `ms`): what
   // they said just before hanging up is then in the draft and can be flushed.
   settle(ms = 1500) {
@@ -222,6 +243,9 @@ class VoiceConversation extends EventEmitter {
 
   _speechStart(ev) {
     this.userSpeaking = true;
+    if (this.duckHoldTimer) this.clearTimer(this.duckHoldTimer);
+    this.duckHoldTimer = null;
+    this.duckedFor = undefined; // this phrase decides now whether Claude stays low
     this.deferredCommit = false; // the user went on talking: the turn is not over
     this.speechStartAt = this.now() - (Number(ev.onset_ms) || 0);
     this.utterance = ev.utterance ?? null;
@@ -304,6 +328,7 @@ class VoiceConversation extends EventEmitter {
   speaking() { return Boolean(this.playing); }
 
   _maybeSpeak(call) {
+    if (this.leaving) return; // the user is hanging up: nothing new is said (it stays unheard)
     const latest = [...(call.messages || [])].reverse().find(m => m.role === 'assistant');
     if (!latest) return;
     const key = `${call.id}:${latest.at}:${latest.rev || 0}`; // rev: to be said (again) after the user missed it
@@ -318,6 +343,7 @@ class VoiceConversation extends EventEmitter {
   }
 
   _speak(text) {
+    if (this.leaving) return;
     if (this.playing) this._stopTts();
     this.counter += 1;
     this.playing = { id: `v${this.counter}`, text, chunks: new Map(), current: null, startedAt: this.now(), ack: false };
@@ -326,6 +352,7 @@ class VoiceConversation extends EventEmitter {
   }
 
   _ack(phrase) {
+    if (this.leaving) return;
     if (this.playing) this._stopTts();
     this.counter += 1;
     this.playing = { id: `ack${this.counter}`, text: ACK_TEXT[phrase], chunks: new Map(), current: null, startedAt: this.now(), ack: true };
@@ -345,7 +372,7 @@ class VoiceConversation extends EventEmitter {
 
   streamSentence(sentence) {
     const text = String(sentence || '').replace(/\s+/g, ' ').trim();
-    if (!text) return;
+    if (!text || this.leaving) return;
     if (this.streamCut) {
       if (this.interrupted) this.interrupted.text = `${this.interrupted.text} ${text}`.trim();
       return;

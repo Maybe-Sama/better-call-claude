@@ -773,7 +773,10 @@ function reconcileStt(active = activeCall()) {
 // The voice detector may cut Claude only when the microphone cannot hear it: echo-cancelled capture AND
 // Claude speaking through the neural voice (the Windows fallback voice is not in the canceller's reference).
 let captureEchoCancelled = false;
-function syncEchoMode() { voice.setEchoCancelled(captureEchoCancelled && tts.ready); }
+// The Windows fallback voice (speechSynthesis) plays outside Chromium's audio, so echo cancellation
+// does not remove it: while it talks, the text-based echo filter is back on.
+let browserVoice = false;
+function syncEchoMode() { voice.setEchoCancelled(captureEchoCancelled && tts.ready && !browserVoice); }
 
 // Echo-cancelled capture runs only during a call (the Windows microphone indicator stays off otherwise).
 function syncCapture(wanted) {
@@ -815,13 +818,26 @@ function registerIpc() {
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
   // Controlled call: what the user was still saying (its transcript may be a second away) goes to Claude
   // before the call leaves. Hook calls keep their own hang-up path (the words go to the session's queue).
-  const leaveStream = async (id, reason) => {
-    if (!broker.calls.get(id)?.stream || id !== broker.activeId) return;
-    await voice.settle(1500);
+  // A question or permission held by a hook call is answered by what the user just said, too. A result
+  // call keeps its own hang-up path (the words go to the session's queue).
+  const leaveCall = async (id, reason) => {
+    const call = broker.calls.get(id);
+    if (!call || id !== broker.activeId) return;
+    const answering = Boolean(call.responder && !call.resolved && call.interactionKind !== 'stop');
+    if (!call.stream && !answering) return;
+    voice.leave();               // Claude goes quiet at once; what it had not said is kept
+    await voice.settle(3500);    // the end of the phrase (0.7 s of silence) plus its transcript
     voice.flushDraft(reason);
   };
-  ipcMain.handle('agentcall:hangup', async (_e, id) => { log('UI: colgar'); await leaveStream(id, 'cuelgas'); return broker.hangup(id); });
-  ipcMain.handle('agentcall:hold', async (_e, id) => { log('UI: en espera'); await leaveStream(id, 'pones la llamada en espera'); return broker.hold(id); });
+  const leaveThen = async (id, reason, action) => {
+    await leaveCall(id, reason);
+    const ok = action();
+    if (broker.activeId === id) voice.cancelLeave(); // the call is still on: Claude may talk again
+    return ok;
+  };
+  ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); return leaveThen(id, 'cuelgas', () => broker.hangup(id)); });
+  ipcMain.handle('agentcall:hold', (_e, id) => { log('UI: en espera'); return leaveThen(id, 'pones la llamada en espera', () => broker.hold(id)); });
+  ipcMain.on('agentcall:tts-fallback', (_e, on) => { browserVoice = Boolean(on); syncEchoMode(); });
   ipcMain.handle('agentcall:dismiss', (_e, id) => { log('UI: terminar conversación'); return broker.dismiss(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });
   ipcMain.handle('agentcall:submit-choice', (_e, { id, choice }) => {

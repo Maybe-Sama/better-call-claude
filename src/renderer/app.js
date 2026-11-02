@@ -13,6 +13,8 @@ let muted = false;
 let ttsSpeaking = false;
 let currentUtterance = null;
 const transcriptHtml = new WeakMap(); // transcript element → the messages HTML it shows
+let armedEnd = null;    // { id, until }: "Terminar" pressed once on a conversation where Claude is working
+let leavingCall = null; // { id, hold }: Colgar / En espera pressed, the call is about to go (survives re-renders)
 let browserUtteranceId = null;
 let ringStopper = null;
 let sttReady = false;
@@ -153,8 +155,8 @@ function renderActive(call) {
       </div>
       <div class="bottom-row">
         <div class="listen-state" id="listenState"><span class="level" aria-hidden="true"><span id="levelBar"></span></span><span id="listenText">${esc(callStatusText(call))}</span></div>
-        ${call.stream ? '<button id="holdBtn" class="secondary hold-btn" title="Claude sigue; vuelves desde la lista">En espera</button>' : ''}
-        <button id="hangupBtn" class="hangup">Colgar</button>
+        ${call.stream ? `<button id="holdBtn" class="secondary hold-btn" title="Claude sigue; vuelves desde la lista" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && leavingCall.hold ? 'Poniendo en espera…' : 'En espera'}</button>` : ''}
+        <button id="hangupBtn" class="hangup" ${leavingCall?.id === call.id ? 'disabled' : ''}>${leavingCall?.id === call.id && !leavingCall.hold ? 'Colgando…' : 'Colgar'}</button>
       </div>
     </div></section>`;
 
@@ -181,11 +183,16 @@ function renderActive(call) {
   document.getElementById('rateBtn').onclick = () => setVoiceRate(VOICE_RATES[(VOICE_RATES.indexOf(voiceRate) + 1) % VOICE_RATES.length]);
   document.getElementById('muteBtn').onclick = async () => { muted = !muted; await window.agentCall.setMuted(muted); render(); };
   const holdBtn = document.getElementById('holdBtn');
-  if (holdBtn) holdBtn.onclick = async () => { stopSpeech(); await window.agentCall.hold(call.id); };
-  document.getElementById('hangupBtn').onclick = async () => {
-    stopSpeech();
-    await window.agentCall.hangup(call.id);
+  // Main silences Claude itself (keeping what it had not said yet) and waits a moment for the end of
+  // what the user was saying, so the buttons only show that the call is leaving.
+  const leave = async (hold) => {
+    if (leavingCall) return;
+    leavingCall = { id: call.id, hold };
+    render();
+    try { await (hold ? window.agentCall.hold(call.id) : window.agentCall.hangup(call.id)); } finally { leavingCall = null; render(); }
   };
+  if (holdBtn) holdBtn.onclick = () => leave(true);
+  document.getElementById('hangupBtn').onclick = () => leave(false);
 
   const input = document.getElementById('textInput');
   if (draft) {
@@ -296,18 +303,29 @@ function renderDashboard() {
     if (again) { again.disabled = false; again.textContent = 'Llamar a Claude'; }
   };
   main.querySelectorAll('[data-end-id]').forEach(btn => {
-    btn.onclick = async (e) => { e.stopPropagation(); await window.agentCall.dismiss(btn.dataset.endId); };
-    btn.onkeydown = (e) => e.stopPropagation(); // Enter here is "Terminar", not "Volver a la llamada"
-  });
-  main.querySelectorAll('[data-call-id]').forEach(card => {
-    const callBack = async () => {
-      const call = state.calls.find(c => c.id === card.dataset.callId);
-      if (!call || call.status === 'snoozed') return;
-      await window.agentCall.answer(call.id);
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.endId;
+      const call = state.calls.find(c => c.id === id);
+      // Claude is working on it: a second press confirms (no dialog: it would block the window).
+      if (call?.awaitingClaude && !(armedEnd?.id === id && armedEnd.until > Date.now())) {
+        armedEnd = { id, until: Date.now() + 4000 };
+        render();
+        setTimeout(() => { if (armedEnd?.id === id) { armedEnd = null; render(); } }, 4100);
+        return;
+      }
+      armedEnd = null;
+      await window.agentCall.dismiss(id);
     };
-    card.onclick = callBack;
-    card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); callBack(); } };
   });
+  const callBack = async (id) => {
+    const call = state.calls.find(c => c.id === id);
+    if (!call || call.status === 'snoozed' || call.sessionEnded) return;
+    await window.agentCall.answer(call.id);
+  };
+  // The card's own button is the keyboard way; a click anywhere else on the card does the same.
+  main.querySelectorAll('[data-back-id]').forEach(btn => { btn.onclick = (e) => { e.stopPropagation(); callBack(btn.dataset.backId); }; });
+  main.querySelectorAll('[data-call-id]').forEach(card => { card.onclick = () => callBack(card.dataset.callId); });
 }
 
 function callCardHtml(call) {
@@ -320,12 +338,14 @@ function callCardHtml(call) {
   if (call.status === 'ended') extra = 'puedes volver unos minutos';
   if (call.sessionEnded) extra = 'la sesión de Claude se ha cerrado';
   // A conversation waiting in the list can be ended from there (Claude stops and its session closes).
-  const end = call.stream && ['onhold', 'parked', 'pending', 'ended'].includes(call.status)
-    ? `<button class="card-end" data-end-id="${esc(call.id)}" title="Terminar la conversación: Claude se detiene">Terminar</button>` : '';
+  const armed = armedEnd?.id === call.id && armedEnd.until > Date.now();
+  const endLabel = call.sessionEnded ? 'Quitar' : armed ? '¿Detener a Claude? Pulsa otra vez' : 'Terminar';
+  const end = call.stream && (call.sessionEnded || ['onhold', 'parked', 'pending', 'ended'].includes(call.status))
+    ? `<button class="card-end ${armed ? 'armed' : ''}" data-end-id="${esc(call.id)}" title="Terminar la conversación: Claude se detiene">${endLabel}</button>` : '';
   const back = call.status === 'parked' || call.status === 'onhold';
-  const action = call.status === 'snoozed' ? '' : `<span class="card-action">${back ? 'Volver a la llamada' : call.status === 'ended' ? 'Volver a llamar' : 'Devolver llamada'} →</span>`;
-  const interactive = call.status !== 'snoozed' ? 'role="button" tabindex="0"' : 'aria-disabled="true"';
-  return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}" ${interactive}>
+  const action = call.status === 'snoozed' || call.sessionEnded ? ''
+    : `<button class="card-action" data-back-id="${esc(call.id)}">${back ? 'Volver a la llamada' : call.status === 'ended' ? 'Volver a llamar' : 'Devolver llamada'} →</button>`;
+  return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}">
     <div class="card-top"><div class="card-title">${esc(call.title)}</div><div class="card-status">${esc(statusLabel(call.status))}</div></div>
     <div class="card-context">${esc(call.context)}</div>
     <div class="card-time">${esc(callLabel(call))}${call.detail ? ` · ${esc(call.detail)}` : ''} · ${esc(extra)}${action}${end}</div>
@@ -401,6 +421,7 @@ function speak(id, text) {
 
 function speakWithBrowser(id, spoken) {
   setTts(true);
+  window.agentCall.ttsFallback(true); // outside echo cancellation: main turns the text echo filter on
   browserUtteranceId = id;
   progress({ type: 'chunk', id, seq: 0, text: spoken });
   const utterance = new SpeechSynthesisUtterance(spoken);
@@ -421,6 +442,7 @@ function speakWithBrowser(id, spoken) {
 }
 
 function speechFinished(id) {
+  window.agentCall.ttsFallback(false);
   progress({ type: 'end', id, interrupted: false });
   setTts(false);
   render();
@@ -545,6 +567,7 @@ function appendStream(id, text) {
   utterance.onerror = done;
   currentUtterance = utterance;
   browserUtteranceId = id;
+  window.agentCall.ttsFallback(true);
   speechSynthesis.speak(utterance);
 }
 
@@ -575,6 +598,7 @@ function stopSpeech() {
   browserUtteranceId = null;
   browserStream = null;
   speechSynthesis.cancel();
+  window.agentCall.ttsFallback(false);
   if (id) progress({ type: 'end', id, interrupted: true });
   setTts(false);
 }
