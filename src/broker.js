@@ -484,9 +484,13 @@ class CallBroker extends EventEmitter {
     if (this.activeId === id) this.activeId = null;
 
     if (call.stream) {
-      // A controlled session ends with the call (its controller closes Claude); nothing stays held.
-      if (call.responder && !call.resolved) this._respond(call, NO_DECISION);
-      this._deleteCall(id);
+      // Like a phone: hanging up does not stop Claude. A prompt still unanswered waits in Pendientes;
+      // a Claude still working goes on and calls back (ringStreamCall) when it finishes or needs the
+      // user; only an idle conversation ends (its controller then closes Claude).
+      if (call.responder && !call.resolved) call.status = 'pending';
+      else if (call.claudeBusy) call.status = 'parked';
+      else this._deleteCall(id);
+      if (this.calls.has(id)) call.updatedAt = this.now();
     } else if (call.responder && !call.resolved && call.interactionKind === 'stop') {
       // Hanging up a result means "done": let Claude stop.
       this._respond(call, NO_DECISION);
@@ -651,6 +655,15 @@ class CallBroker extends EventEmitter {
     this._changed();
   }
 
+  // Claude finished (or stopped) while the user had hung up: it calls the user back.
+  ringStreamCall(callId) {
+    const call = this.calls.get(callId);
+    if (!call?.stream || call.status !== 'parked') return false;
+    call.updatedAt = this.now();
+    this._enqueueOrRing(call);
+    return true;
+  }
+
   // A message object of the call was updated in place (e.g. marked delivered).
   messagesChanged(callId) {
     if (this.calls.has(callId)) this._changed('message', { id: callId });
@@ -727,6 +740,14 @@ class CallBroker extends EventEmitter {
       active.messages.push(fullMessage);
       this._changed('message', { id: active.id, message: fullMessage });
       return active;
+    }
+    // A controlled conversation the user hung up on while Claude worked: the prompt rings that call.
+    const parked = [...this.calls.values()].find(c => c.stream && c.status === 'parked' && c.sessionId === sessionId);
+    if (parked) {
+      Object.assign(parked, fields, { updatedAt: this.now() });
+      parked.messages.push(fullMessage);
+      this._enqueueOrRing(parked);
+      return parked;
     }
 
     const call = this._newCall({

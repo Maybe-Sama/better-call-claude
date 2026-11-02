@@ -664,8 +664,8 @@ function routeUserText({ callId, sessionId, text, urgency, source }) {
 
 const voice = new VoiceConversation({ deliver: routeUserText });
 voice.on('speak', ({ id, text }) => sendToRenderer('agentcall:voice', { cmd: 'speak', id, text }));
-voice.on('tts', ({ action }) => {
-  if (action === 'stop') tts.send({ cmd: 'stop' });
+voice.on('tts', ({ action, id }) => {
+  if (action === 'stop') tts.send({ cmd: 'stop', id });
   sendToRenderer('agentcall:voice', { cmd: action });
 });
 voice.on('ack', ({ id, phrase }) => {
@@ -833,7 +833,7 @@ function registerIpc() {
   ipcMain.handle('agentcall:set-tts', (_e, value) => { ttsSpeaking = Boolean(value); reconcileStt(); return ttsSpeaking; });
   ipcMain.handle('agentcall:tts-speak', (_e, { id, text }) => tts.send({ cmd: 'speak', id, text }));
   ipcMain.handle('agentcall:tts-ack', (_e, id) => tts.send({ cmd: 'ack', id }));
-  ipcMain.handle('agentcall:tts-stop', () => tts.send({ cmd: 'stop' }));
+  ipcMain.handle('agentcall:tts-stop', (_e, id) => tts.send({ cmd: 'stop', id: typeof id === 'string' ? id : null }));
   ipcMain.handle('agentcall:tts-engine', () => (tts.ready ? 'kokoro' : 'browser'));
   ipcMain.handle('agentcall:window-minimize', () => mainWindow?.minimize());
   ipcMain.handle('agentcall:window-hide', () => mainWindow?.hide());

@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('agentCall', {
   pin: (value) => ipcRenderer.invoke('agentcall:window-pin', value),
   ttsSpeak: (id, text) => ipcRenderer.invoke('agentcall:tts-speak', { id, text }),
   ttsAck: (id) => ipcRenderer.invoke('agentcall:tts-ack', id),
-  ttsStop: () => ipcRenderer.invoke('agentcall:tts-stop'),
+  ttsStop: (id) => ipcRenderer.invoke('agentcall:tts-stop', id),
   getTtsEngine: () => ipcRenderer.invoke('agentcall:tts-engine'),
   // Voice conversation (src/voice/conversation.js runs in the main process).
   adoptDraft: () => ipcRenderer.invoke('agentcall:adopt-draft'),

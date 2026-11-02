@@ -151,15 +151,68 @@ test('AskUserQuestion is answered by voice with the chosen option', async () => 
   assert.equal(session.decisions[0].input.answers['¿Qué base de datos?'], 'Neon');
 });
 
-test('hanging up closes the session and denies anything still pending', async () => {
+test('hanging up while Claude is idle closes the session', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  broker.hangup(call.id);
+  await new Promise(r => setImmediate(r));
+  assert.equal(session.closed, true);
+  assert.equal(ctl.owns(call.id), false);
+});
+
+// Live test 2026-11-02: "he colgado a ver si me vuelve a llamar cuando termine la tarea".
+test('hanging up while Claude works lets it go on, and it calls back with the result', async () => {
+  const { broker, ctl, session, spoken } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  ctl.say(call.id, 'Compila toda la web.', 'queue');
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('text', { delta: 'Voy a ello. ' });
+  broker.hangup(call.id);
+  await new Promise(r => setImmediate(r));
+  assert.equal(session.closed, false, 'Claude keeps working');
+  assert.equal(broker.activeId, null);
+  assert.equal(broker.getSnapshot().calls[0].status, 'parked');
+  session.emit('text', { delta: 'Ya está compilada. ' });
+  session.emit('assistant-message', { text: 'Ya está compilada. Todo **funciona**.' });
+  assert.ok(!spoken.some(s => /compilada/.test(s)), 'nobody is on the line: nothing is spoken');
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  const pub = broker.getSnapshot().calls[0];
+  assert.equal(pub.status, 'ringing', 'Claude calls back');
+  const last = pub.messages.at(-1);
+  assert.equal(last.silent, undefined);
+  assert.equal(last.speech, 'Ya está compilada. Todo funciona.');
+  assert.equal(broker.answer(call.id), true);
+  assert.equal(broker.getSnapshot().calls[0].waiting, true, 'the conversation goes on');
+  assert.equal(ctl.say(call.id, 'Gracias, ahora súbela.', 'queue').ok, true);
+});
+
+test('a permission Claude needs while the user hung up rings with the question', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  broker.setStreamBusy(call.id, true);
+  broker.hangup(call.id);
+  session.emit('permission', { requestId: 'p3', toolName: 'Bash', input: { command: 'npm run build' } });
+  const pub = broker.getSnapshot().calls;
+  assert.equal(pub.length, 1, 'the same call, not a second one');
+  assert.equal(pub[0].status, 'ringing');
+  assert.equal(pub[0].interactionKind, 'permission');
+  broker.answer(call.id);
+  broker.submitUserText(call.id, 'sí');
+  assert.deepEqual(session.decisions, [{ requestId: 'p3', allow: true, input: { command: 'npm run build' } }]);
+});
+
+test('hanging up with a prompt unanswered keeps it in Pendientes (Claude waits for it)', async () => {
   const { broker, ctl, session } = setup();
   const call = await ctl.start({ cwd: 'C:/work/app' });
   session.emit('permission', { requestId: 'p9', toolName: 'Bash', input: { command: 'ls' } });
   broker.hangup(call.id);
   await new Promise(r => setImmediate(r));
-  assert.equal(session.closed, true);
-  assert.equal(session.decisions.at(-1).allow, false);
-  assert.equal(ctl.owns(call.id), false);
+  assert.equal(session.closed, false);
+  assert.equal(session.decisions.length, 0);
+  assert.equal(broker.getSnapshot().calls[0].status, 'pending');
 });
 
 test('if Claude exits, the call says so instead of going silent', async () => {

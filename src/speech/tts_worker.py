@@ -100,6 +100,7 @@ class Speaker:
         self.lock = threading.Lock()
         self.model_lock = threading.Lock()
         self.current = None
+        self.current_id = None  # id of the utterance being produced (speak, ack or stream)
         self.acks = {}
         self.prepared = collections.OrderedDict()  # normalized text → Prepared (a few, newest last)
         self.stream = None  # {"id", "queue", "stopped"} while Claude's answer is streamed in
@@ -197,6 +198,7 @@ class Speaker:
         st = {"id": utt_id, "queue": queue.Queue(), "stopped": stopped}
         with self.lock:
             self.current = stopped
+            self.current_id = utt_id
             self.stream = st
         threading.Thread(target=self._produce_stream, args=(st,), daemon=True).start()
 
@@ -233,9 +235,14 @@ class Speaker:
         finally:
             emit({"type": "done", "id": st["id"], "chunks": seq, "interrupted": st["stopped"].is_set()})
 
-    def stop(self):
+    def stop(self, utt_id=None):
+        # A stop that names an utterance only stops that one: one sent by the window can arrive after
+        # the main process already started the next answer, and must not cut it.
         with self.lock:
+            if utt_id and self.current_id and utt_id != self.current_id:
+                return
             cur, self.current = self.current, None
+            self.current_id = None
             self.stream = None
         if cur:
             cur.set()
@@ -245,6 +252,7 @@ class Speaker:
         cur = threading.Event()
         with self.lock:
             self.current = cur
+            self.current_id = utt_id
         threading.Thread(target=self._produce, args=(utt_id, cur, text, audio), daemon=True).start()
 
     def _send(self, utt_id, seq, audio, text):
@@ -368,7 +376,7 @@ def main():
             ack = speaker.acks.get(msg.get("phrase")) or speaker.acks["vale"]
             speaker.speak(msg.get("id", "ack"), audio=ack)
         elif cmd == "stop":
-            speaker.stop()
+            speaker.stop(msg.get("id"))
         elif cmd == "prepare" and msg.get("text"):
             speaker.prepare(msg["text"])
         elif cmd == "stream-start":

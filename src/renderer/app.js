@@ -30,7 +30,7 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch])); }
 function activeCall() { return state.calls.find(c => c.id === state.activeId) || null; }
 function ringingCall() { return state.calls.find(c => c.status === 'ringing') || null; }
-function listedCalls() { return state.calls.filter(c => ['pending', 'snoozed', 'queued'].includes(c.status)); }
+function listedCalls() { return state.calls.filter(c => ['parked', 'pending', 'snoozed', 'queued'].includes(c.status)); }
 
 function callLabel(call) {
   if (call.type === 'error') return 'ERROR';
@@ -38,7 +38,7 @@ function callLabel(call) {
   if (call.interactionKind === 'permission') return 'PERMISO NECESARIO';
   return 'NECESITA RESPUESTA';
 }
-function statusLabel(status) { return ({ pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
+function statusLabel(status) { return ({ parked: 'Trabajando', pending: 'Pendiente', queued: 'En cola', snoozed: 'Pospuesta', ringing: 'Llamando', active: 'Activa' })[status] || status; }
 function timeAgo(ts) {
   const diff = Math.max(0, Date.now() - ts);
   if (diff < 60_000) return 'ahora';
@@ -283,7 +283,9 @@ function renderDashboard() {
 function callCardHtml(call) {
   let extra = timeAgo(call.createdAt);
   if (call.status === 'snoozed' && call.snoozedUntil) extra = `vuelve a las ${new Date(call.snoozedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  const action = call.status === 'snoozed' ? '' : '<span class="card-action">Devolver llamada →</span>';
+  // Hung up while Claude works: it calls back when done; the user can also go back to it now.
+  if (call.status === 'parked') extra = 'te llamará al terminar';
+  const action = call.status === 'snoozed' ? '' : `<span class="card-action">${call.status === 'parked' ? 'Volver a la llamada' : 'Devolver llamada'} →</span>`;
   const interactive = call.status !== 'snoozed' ? 'role="button" tabindex="0"' : 'aria-disabled="true"';
   return `<article class="call-card ${esc(call.type)}" data-call-id="${esc(call.id)}" ${interactive}>
     <div class="card-top"><div class="card-title">${esc(call.title)}</div><div class="card-status">${esc(statusLabel(call.status))}</div></div>
@@ -527,7 +529,8 @@ function playAck(id) {
 function stopSpeech() {
   const id = playback.id || browserUtteranceId;
   if (playback.id) {
-    window.agentCall.ttsStop();
+    // Named: if this stop reaches the worker after the next answer started, it is ignored there.
+    window.agentCall.ttsStop(playback.id);
     discardPlayback();
   }
   currentUtterance = null;

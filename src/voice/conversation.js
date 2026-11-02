@@ -102,6 +102,10 @@ class VoiceConversation extends EventEmitter {
       this.interrupted = null;
       this.pendingSpeak = null;
       this.lastPlayed = null;
+      this.noiseCut = null;
+      this.streamCut = false; // a cut belongs to the call it happened in
+      this.replyFrom = 0;     // a round trip never spans a hang-up
+      this.streamId = null;
     }
     this.kind = call?.interactionKind || null;
     this.turn = !call ? 'idle'
@@ -392,7 +396,7 @@ class VoiceConversation extends EventEmitter {
 
   _stopTts() {
     if (this.playing) this.stopping = { id: this.playing.id, at: this.now() };
-    this.emit('tts', { action: 'stop' });
+    this.emit('tts', { action: 'stop', id: this.playing?.id || null });
     this._finishTts(true);
   }
 

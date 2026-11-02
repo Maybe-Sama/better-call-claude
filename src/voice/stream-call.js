@@ -5,6 +5,7 @@
 // an interruption really stops Claude. Permission prompts and AskUserQuestion go through the broker
 // like hook prompts do, so they are answered by voice, buttons or text exactly as in hook mode.
 const { EventEmitter } = require('node:events');
+const { toSpeech } = require('../speech-text');
 
 const GREETING = 'Dime.';
 
@@ -49,6 +50,10 @@ class StreamCallController extends EventEmitter {
 
   owns(callId) { return this.calls.has(callId); }
 
+  // Someone is on the line: Claude's text is spoken as it streams. Otherwise (hung up, ringing back,
+  // in Pendientes) it is only kept, and the call rings with it when Claude is done.
+  _onLine(callId) { return this.broker.calls.get(callId)?.status === 'active'; }
+
   async start({ cwd, resume = null }) {
     const session = this.createSession({ cwd, resume, appendSystemPrompt: VOICE_CALL_RULES });
     await session.start();
@@ -81,30 +86,36 @@ class StreamCallController extends EventEmitter {
     session.on('turn-start', () => {
       this.broker.setStreamBusy(callId, true);
       entry.chunker = this.createChunker();
-      this.voice.streamTurnStart();
+      if (this._onLine(callId)) this.voice.streamTurnStart();
     });
     // Each assistant message (before and after every tool) is its own text: what was left of the
     // previous one is said first, so the answer after a tool is not glued to it or lost.
     session.on('assistant-start', () => {
       if (!entry.chunker) return;
       const rest = entry.chunker.finish();
-      if (rest) this.voice.streamSentence(rest);
+      if (rest && this._onLine(callId)) this.voice.streamSentence(rest);
       entry.chunker = this.createChunker();
     });
     session.on('text', ({ delta }) => {
       if (!entry.chunker) return;
-      for (const sentence of entry.chunker.push(delta)) this.voice.streamSentence(sentence);
+      const sentences = entry.chunker.push(delta);
+      if (this._onLine(callId)) for (const sentence of sentences) this.voice.streamSentence(sentence);
     });
     session.on('assistant-message', ({ text, aborted }) => {
-      // Already spoken while streamed: kept in the call, not read again.
-      if (text && !aborted) this.broker.addCallMessage(callId, { role: 'assistant', text, speech: '', silent: true, kind: 'stream' });
+      if (!text || aborted) return;
+      // Already spoken while streamed: kept in the call, not read again. Nobody on the line: the
+      // latest one is what the user hears when they pick up the call back.
+      if (this._onLine(callId)) this.broker.addCallMessage(callId, { role: 'assistant', text, speech: '', silent: true, kind: 'stream' });
+      else this.broker.addCallMessage(callId, { role: 'assistant', text, speech: toSpeech(text), kind: 'stream' });
     });
     session.on('turn-end', ({ aborted } = {}) => {
+      const onLine = this._onLine(callId);
       const rest = !aborted && entry.chunker ? entry.chunker.finish() : '';
-      if (rest) this.voice.streamSentence(rest);
-      this.voice.streamTurnEnd();
+      if (rest && onLine) this.voice.streamSentence(rest);
+      if (onLine) this.voice.streamTurnEnd();
       entry.chunker = null;
       this.broker.setStreamBusy(callId, Boolean(session.busy));
+      if (!session.busy) this.broker.ringStreamCall(callId);
     });
     session.on('message', ({ uuid, state }) => {
       const msg = entry.messages.get(uuid);
@@ -125,6 +136,7 @@ class StreamCallController extends EventEmitter {
       entry.ended = true;
       this.broker.setStreamBusy(callId, false);
       this.broker.addCallMessage(callId, { role: 'system', text: 'La sesión de Claude se ha cerrado. Cuelga cuando quieras.', kind: 'note' });
+      this.broker.ringStreamCall(callId); // hung up while it worked: the user should know
     });
     session.on('error', err => this.log(`Sesión controlada: ${err?.message || err}`));
   }

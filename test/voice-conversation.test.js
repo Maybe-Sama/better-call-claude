@@ -310,6 +310,15 @@ test('aec: the voice ducks at once and stops if the user keeps talking', () => {
   assert.equal(duck.ms, 90, 'from the onset of the voice');
 });
 
+test('a stop names the utterance it stops (a late stop must not cut the next answer)', () => {
+  const h = harness();
+  const id = speakingCall(h);
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Un registro A apunta a una IP.');
+  const stop = h.events('tts').find(t => t.action === 'stop');
+  assert.equal(stop.id, id);
+});
+
 test('aec: a cough only ducks for a moment', () => {
   const h = harness();
   speakingCall(h);
@@ -473,6 +482,17 @@ test('aec stream: a noise with no words that cut Claude lets it go on talking', 
   assert.equal(streamed.at(-1).text, 'El agente ya está mirando.', 'the rest of the turn is spoken again');
   assert.equal(streamed.at(-1).id, again[0].id);
   assert.deepEqual(failures, ['false_speech_start']);
+});
+
+test('stream: going back to a call after hanging up hears Claude again (no cut carried over)', () => {
+  const h = harness();
+  const { streamed, id } = streamingAec(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 9, onset_ms: 90 });
+  h.conv.stt({ type: 'final', utterance: 9, text: 'Espera.', confidence: 0.9 }); // a real cut
+  h.conv.setCall(null); // hung up
+  h.conv.setCall(waitingCall({ messages: [], awaitingClaude: true, waiting: false }));
+  h.conv.streamSentence('Ya está compilada.');
+  assert.ok(streamed.some(s => s.id !== id && s.action === 'append' && s.text === 'Ya está compilada.'));
 });
 
 test('aec stream: a garbled guess ("Música" 0.35) is noise too', () => {
