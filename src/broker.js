@@ -35,6 +35,16 @@ Interaction rules:
 
 const CALLS_OFF_NOTE = 'AgentCall voice calls are now disabled for this session. Ignore the earlier call-related rules and interact normally through the terminal.';
 
+// What the user said in the call while Claude was working, as context for Claude (in order).
+function speechNote(items, { unheard = false } = {}) {
+  const quoted = items.map(i => `«${i.text}»`).join(' ');
+  const tail = unheard ? ' El usuario todavía no ha oído tu último mensaje: si sigue siendo relevante, resúmeselo en una frase.' : '';
+  if (items.some(i => i.urgency === 'interrupt')) {
+    return `IMPORTANTE: el usuario te ha interrumpido por la llamada de voz de AgentCall mientras trabajabas: ${quoted}. Atiende esto antes de seguir: si te pide parar, deshacer o cambiar algo, hazlo; si no está claro, pregúntale.${tail}`;
+  }
+  return `Mientras trabajabas, el usuario te ha dicho por la llamada de voz de AgentCall: ${quoted}. Tenlo en cuenta en lo que estás haciendo y ajústalo si cambia algo.${tail}`;
+}
+
 function cleanText(value, max = 4000) {
   if (value == null) return '';
   const text = String(value).replace(/\r/g, '').trim();
@@ -192,19 +202,61 @@ class CallBroker extends EventEmitter {
     session.lastPromptAt = this.now();
     session.interacted = false;
     this._releaseSession(payload.session_id, null, 'Has seguido en la terminal; esta petición ya no está pendiente.');
+    // Anything said in a call and not delivered yet travels with this prompt.
+    const pending = this.takePendingSpeech(payload.session_id);
     this._changed();
-    return null;
+    return pending.length ? speechNote(pending) : null;
   }
 
-  // PostToolUse: if the user answered a permission prompt in the terminal, the matching held
-  // PermissionRequest is obsolete. Claude Code never closes that HTTP request, so we detect it here.
+  // PostToolUse. Two jobs: (1) a permission answered in the terminal makes the matching held
+  // PermissionRequest obsolete (Claude Code never closes that HTTP request, so we detect it here);
+  // (2) the first safe point to hand Claude what the user said in the call while it worked.
+  // Returns the hook output, or null.
   noteToolDone(payload = {}) {
-    if (!payload.session_id) return;
+    if (!payload.session_id) return null;
     const signature = toolSignature(payload);
     for (const call of [...this.calls.values()]) {
       if (call.sessionId !== payload.session_id || call.interactionKind !== 'permission' || call.resolved) continue;
       if (call.toolSignature === signature) this._release(call, 'Permiso resuelto en la terminal.');
     }
+    const pending = this.takePendingSpeech(payload.session_id);
+    if (!pending.length) return null;
+    return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: speechNote(pending) } };
+  }
+
+  // The user spoke (or typed) in a call while Claude was not waiting for an answer. Kept per session,
+  // in order, and shown in the call until a hook can hand it to Claude: PostToolUse, Stop, the next
+  // prompt or permission request. Survives hanging up; never dropped.
+  queueUserSpeech(callId, rawText, urgency = 'queue') {
+    const call = this.calls.get(callId);
+    const text = cleanText(rawText, 4000);
+    if (!call || !text) return { ok: false, error: 'No hay una llamada activa o el texto está vacío.' };
+    const item = { id: crypto.randomUUID(), text, urgency: urgency === 'interrupt' ? 'interrupt' : 'queue', at: this.now() };
+    const session = this._session({ session_id: call.sessionId });
+    (session.pendingSpeech ||= []).push(item);
+    call.messages.push({ role: 'user', text, at: item.at, kind: 'queued', urgency: item.urgency, pendingId: item.id, delivered: false });
+    call.updatedAt = this.now();
+    this._changed('message', { id: call.id, message: call.messages.at(-1) });
+    return { ok: true, queued: true, urgency: item.urgency };
+  }
+
+  pendingSpeech(sessionId) {
+    return [...(this.sessions.get(sessionId)?.pendingSpeech || [])];
+  }
+
+  // Hands over everything pending for a session (in order) and marks it delivered in the call.
+  takePendingSpeech(sessionId) {
+    const session = this.sessions.get(sessionId);
+    const items = session?.pendingSpeech || [];
+    if (!items.length) return [];
+    session.pendingSpeech = [];
+    const ids = new Set(items.map(i => i.id));
+    for (const call of this.calls.values()) {
+      if (call.sessionId !== sessionId) continue;
+      for (const m of call.messages || []) if (ids.has(m.pendingId)) m.delivered = true;
+    }
+    this._changed();
+    return items;
   }
 
   // Calls disabled for this session: Claude Code continues exactly as without AgentCall.
@@ -239,6 +291,13 @@ class CallBroker extends EventEmitter {
       responder?.(NO_DECISION);
       return null;
     }
+    // The user already told Claude to stop ("para", "no hagas eso") during the call: do not ring, deny
+    // with their words. Denying is the safe side; Claude can ask again after reading them.
+    if ((this.sessions.get(payload.session_id)?.pendingSpeech || []).some(i => i.urgency === 'interrupt')) {
+      const items = this.takePendingSpeech(payload.session_id);
+      responder?.({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: `${speechNote(items)} Por eso no se ha ejecutado esta acción.`, interrupt: false } } });
+      return null;
+    }
     const described = describePermission(payload);
     return this._receiveInteractive({
       payload,
@@ -258,6 +317,21 @@ class CallBroker extends EventEmitter {
 
     const active = this._active();
     const sameActive = Boolean(active && active.sessionId === sessionId);
+
+    // The user added something in the call while Claude worked and no tool call came to deliver it:
+    // Claude continues with it right away instead of ending the turn (its result is shown, not read).
+    const pending = failure ? [] : this.takePendingSpeech(sessionId);
+    if (pending.length) {
+      responder?.({ hookSpecificOutput: { hookEventName: 'Stop', additionalContext: speechNote(pending, { unheard: true }) } });
+      session.quietStop = false;
+      if (!sameActive) return null;
+      const text = cleanText(payload.last_assistant_message || '', 20_000);
+      if (text) active.messages.push({ role: 'assistant', text, speech: '', silent: true, at: this.now(), kind: 'completion' });
+      Object.assign(active, { awaitingClaude: true, interactionKind: null, responder: null, resolved: true, updatedAt: this.now() });
+      this._changed('message', { id: active.id });
+      return active;
+    }
+
     if (session.quietStop && !failure) {
       session.quietStop = false;
       if (!sameActive) { responder?.(NO_DECISION); return null; }

@@ -86,6 +86,7 @@ class Transcriber(threading.Thread):
         self.stale_upto = 0  # utterances <= this id belong to a paused/ended listening period
         self.context = ""
         self.hotwords = None
+        self.busy = False  # a transcription popped from the queue is running
 
     def set_context(self, text, hotwords):
         """What Claude just said / asked: biases Whisper towards the words the user is likely to use."""
@@ -127,25 +128,37 @@ class Transcriber(threading.Thread):
                 else:
                     kind, (utt_id, audio) = "partial", self.partial
                     self.partial = None
-            if self._stale(utt_id) or (kind == "partial" and utt_id in self.done_utterances):
-                continue
-            started = time.monotonic()
+                self.busy = True
             try:
-                text, confidence = self.transcribe(audio, final=(kind == "final"))
-            except Exception as exc:  # keep the worker alive
-                emit({"type": "error", "engine": "whisper", "message": str(exc)[:300]})
-                continue
-            if self._stale(utt_id):
-                continue
-            timing = {"stt_ms": int((time.monotonic() - started) * 1000), "audio_ms": int(len(audio) * 1000 / SAMPLE_RATE)}
-            if kind == "final":
-                self.done_utterances.add(utt_id)
-                if text:
-                    emit({"type": "final", "text": text, "confidence": round(confidence, 3), "utterance": utt_id, **timing})
-                else:
-                    emit({"type": "rejected", "utterance": utt_id, **timing})
-            elif text and utt_id not in self.done_utterances:
-                emit({"type": "partial", "text": text, "utterance": utt_id, **timing})
+                self._process(kind, utt_id, audio)
+            finally:
+                with self.cv:
+                    self.busy = False
+
+    def idle(self):
+        with self.cv:
+            return not self.finals and self.partial is None and not self.busy
+
+    def _process(self, kind, utt_id, audio):
+        if self._stale(utt_id) or (kind == "partial" and utt_id in self.done_utterances):
+            return
+        started = time.monotonic()
+        try:
+            text, confidence = self.transcribe(audio, final=(kind == "final"))
+        except Exception as exc:  # keep the worker alive
+            emit({"type": "error", "engine": "whisper", "message": str(exc)[:300]})
+            return
+        if self._stale(utt_id):
+            return
+        timing = {"stt_ms": int((time.monotonic() - started) * 1000), "audio_ms": int(len(audio) * 1000 / SAMPLE_RATE)}
+        if kind == "final":
+            self.done_utterances.add(utt_id)
+            if text:
+                emit({"type": "final", "text": text, "confidence": round(confidence, 3), "utterance": utt_id, **timing})
+            else:
+                emit({"type": "rejected", "utterance": utt_id, **timing})
+        elif text and utt_id not in self.done_utterances:
+            emit({"type": "partial", "text": text, "utterance": utt_id, **timing})
 
     def transcribe(self, audio, final):
         model = self.model if final else self.partial_model
@@ -288,9 +301,9 @@ def run_wav(args, segmenter):
                 time.sleep(delay)
         segmenter.feed(pcm[i:i + FRAME])
     segmenter.finish()
-    while segmenter.t.finals or segmenter.t.partial is not None:
+    while not segmenter.t.idle():  # queued work and the transcription in progress
         time.sleep(0.1)
-    time.sleep(3)
+    time.sleep(0.5)
     emit({"type": "wav-end"})
 
 

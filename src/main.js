@@ -7,6 +7,8 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { CallBroker, MIN_RESULT_TURN_MS } = require('./broker');
 const { readSessionTitle } = require('./session-title');
+const { VoiceConversation, classifyUrgency } = require('./voice/conversation');
+const { VoiceMetrics, jsonlSink } = require('./voice/metrics');
 
 // Optional user settings in %LOCALAPPDATA%AgentCallconfig.json, e.g.
 //   {"mic": "IN 1 (BEHRINGER", "voice": "ef_dora", "whisperModel": "small", "vocab": "Eureka, Supabase"}
@@ -18,6 +20,7 @@ const CONFIG_KEYS = {
   defaultMode: 'AGENTCALL_DEFAULT_MODE',
   ttsProvider: 'AGENTCALL_TTS_PROVIDER', edgeVoice: 'AGENTCALL_EDGE_VOICE', edgeRate: 'AGENTCALL_EDGE_RATE',
   micGain: 'AGENTCALL_MIC_GAIN', speechThreshold: 'AGENTCALL_SPEECH_THRESHOLD', whisperBackend: 'AGENTCALL_WHISPER_BACKEND',
+  voiceMetrics: 'AGENTCALL_VOICE_METRICS',
 };
 try {
   const config = JSON.parse(fs.readFileSync(path.join(process.env.LOCALAPPDATA || '', 'AgentCall', 'config.json'), 'utf8'));
@@ -179,6 +182,7 @@ broker.on('change', (snapshot, detail) => {
   sendToRenderer('agentcall:state', snapshot);
 
   const active = activeCall(snapshot);
+  voice.setCall(active);
   const ringing = snapshot.calls.some(c => c.status === 'ringing');
   if (detail.event === 'ringing') showWindow({ onTop: true });
   else if (detail.event === 'active') showWindow({ focus: true, onTop: true });
@@ -273,13 +277,15 @@ async function routeHook(req, res) {
     case '/hooks/user-prompt-submit': {
       const context = broker.notePrompt(body, hint);
       if (!context) return jsonResponse(res, 200, {});
-      log(`/saul [${session}] → ${broker.sessionMode(body.session_id, hint)}`);
+      log(`UserPromptSubmit [${session}] → contexto (${broker.sessionMode(body.session_id, hint)})`);
       return jsonResponse(res, 200, { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } });
     }
 
-    case '/hooks/post-tool-use':
-      broker.noteToolDone(body);
-      return jsonResponse(res, 200, {});
+    case '/hooks/post-tool-use': {
+      const output = broker.noteToolDone(body);
+      if (output) log(`PostToolUse [${session}] → entrego lo dicho en la llamada`);
+      return jsonResponse(res, 200, output || {});
+    }
 
     case '/hooks/ask-user': {
       log(`AskUserQuestion [${session}]`);
@@ -493,6 +499,7 @@ class SttManager {
       }
     }
     if (event.type === 'ready') event.engine = this.engine;
+    if (this.child === child) voice.stt(event);
     sendToRenderer('agentcall:stt', event);
   }
 
@@ -600,8 +607,41 @@ class TtsManager {
 }
 const tts = new TtsManager();
 
-// The microphone opens as soon as the call is answered and stays open while Claude speaks
-// (Claude is never interrupted: the renderer holds the answer until Claude finishes and filters its echo).
+// ── Voice conversation ───────────────────────────────────────────────────────
+// VoiceConversation (src/voice/conversation.js) owns turn-taking; the renderer only shows and plays.
+// What the user says goes to the held hook when Claude is waiting for it, otherwise to the session's
+// queue, which hooks deliver at the next safe point (broker.queueUserSpeech).
+const metrics = new VoiceMetrics({
+  sink: /^(1|true)$/i.test(process.env.AGENTCALL_VOICE_METRICS || '') ? jsonlSink(path.join(AGENTCALL_DATA, 'voice-metrics.jsonl')) : null,
+});
+
+function routeUserText({ callId, text, urgency, source }) {
+  const call = broker.calls.get(callId);
+  if (!call) return { ok: false, error: 'Esta llamada ya no existe.' };
+  const answering = Boolean(call.responder && !call.resolved);
+  const result = answering ? broker.submitUserText(callId, text) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
+  log(`Voz → ${answering ? 'respuesta' : `cola ${result.urgency || ''}`} (${String(text).length} caracteres, ${source})`);
+  return { ...result, route: answering ? 'answer' : 'steer' };
+}
+
+const voice = new VoiceConversation({ deliver: routeUserText });
+voice.on('speak', ({ id, text }) => sendToRenderer('agentcall:voice', { cmd: 'speak', id, text }));
+voice.on('tts', ({ action }) => {
+  if (action === 'stop') tts.send({ cmd: 'stop' });
+  sendToRenderer('agentcall:voice', { cmd: action });
+});
+voice.on('ack', ({ id, phrase }) => {
+  if (tts.send({ cmd: 'ack', id, phrase })) sendToRenderer('agentcall:voice', { cmd: 'ack', id });
+  else voice.tts({ type: 'end', id }); // no neural voice: no acknowledgement
+});
+voice.on('append', ({ text }) => sendToRenderer('agentcall:voice', { cmd: 'append', text }));
+voice.on('error', ({ message }) => sendToRenderer('agentcall:voice', { cmd: 'error', message }));
+voice.on('ui', snapshot => sendToRenderer('agentcall:voice-ui', snapshot));
+voice.on('local', ({ intent }) => log(`Voz: ${intent === 'resume' ? 'sigue donde lo dejó' : 'repite lo último'}`));
+voice.on('metric', ({ name, ms }) => metrics.record(name, ms));
+voice.on('debug', message => log(`Voz: ${message}`));
+
+// The microphone opens as soon as the call is answered and stays open while Claude speaks and works.
 // Recognition context for the active call: the question and its options, or the key terms of Claude's message.
 function sttContextFor(call) {
   const last = [...(call.messages || [])].reverse().find(m => m.role === 'assistant');
@@ -629,8 +669,8 @@ function reconcileStt(active = activeCall()) {
   if (!active) return stt.idle();
   stt.ensure();
   stt.setContext(sttContextFor(active));
-  const canAnswer = ['ask', 'permission', 'stop'].includes(active.interactionKind) && active.waiting && !active.awaitingClaude;
-  stt.setListening(Boolean(canAnswer && !muted));
+  // The microphone stays open for the whole call: what is said while Claude works is queued for it.
+  stt.setListening(!muted);
 }
 
 function registerIpc() {
@@ -639,9 +679,22 @@ function registerIpc() {
   ipcMain.handle('agentcall:snooze', (_e, { id, minutes }) => { log(`UI: posponer ${minutes} min`); return broker.snooze(id, minutes); });
   ipcMain.handle('agentcall:hangup', (_e, id) => { log('UI: colgar'); return broker.hangup(id); });
   ipcMain.handle('agentcall:set-dnd', (_e, value) => { log(`UI: DND ${value ? 'ON' : 'OFF'}`); broker.setDnd(value); return broker.dnd; });
-  ipcMain.handle('agentcall:submit-choice', (_e, { id, choice }) => { log(`UI: botón ${Array.isArray(choice) ? choice.join(' + ') : choice}`); return broker.submitChoice(id, choice); });
-  ipcMain.handle('agentcall:submit-text', (_e, { id, text }) => { log(`UI: respuesta (${String(text).length} caracteres)`); return broker.submitUserText(id, text); });
-  ipcMain.handle('agentcall:set-muted', (_e, value) => { log(`UI: micrófono ${value ? 'silenciado' : 'activo'}`); muted = Boolean(value); reconcileStt(); return muted; });
+  ipcMain.handle('agentcall:submit-choice', (_e, { id, choice }) => {
+    log(`UI: botón ${Array.isArray(choice) ? choice.join(' + ') : choice}`);
+    voice.clearDraft();
+    const result = broker.submitChoice(id, choice);
+    if (result?.ok && result.resolved !== false) voice.committed({ ok: true, route: 'answer', text: '' });
+    return result;
+  });
+  ipcMain.handle('agentcall:submit-text', (_e, { id, text }) => {
+    if (id !== broker.activeId) return { ok: false, error: 'Esta llamada ya no está activa.' };
+    return voice.submitTyped(text);
+  });
+  ipcMain.handle('agentcall:adopt-draft', () => voice.adoptDraft());
+  ipcMain.on('agentcall:set-typing', (_e, value) => voice.setTyping(value));
+  ipcMain.on('agentcall:tts-progress', (_e, event) => { if (event && typeof event === 'object') voice.tts(event); });
+  ipcMain.handle('agentcall:voice-metrics', () => metrics.summary());
+  ipcMain.handle('agentcall:set-muted', (_e, value) => { log(`UI: micrófono ${value ? 'silenciado' : 'activo'}`); muted = Boolean(value); voice.setMuted(muted); reconcileStt(); return muted; });
   ipcMain.handle('agentcall:set-tts', (_e, value) => { ttsSpeaking = Boolean(value); reconcileStt(); return ttsSpeaking; });
   ipcMain.handle('agentcall:tts-speak', (_e, { id, text }) => tts.send({ cmd: 'speak', id, text }));
   ipcMain.handle('agentcall:tts-ack', (_e, id) => tts.send({ cmd: 'ack', id }));

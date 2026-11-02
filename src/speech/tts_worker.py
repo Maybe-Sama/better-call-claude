@@ -2,7 +2,7 @@
 
 stdin  (one JSON object per line)
   {"cmd": "speak", "id": "...", "text": "..."}   replaces whatever is being said
-  {"cmd": "ack", "id": "..."}                     short pre-rendered acknowledgement ("Vale, se lo paso a Claude.")
+  {"cmd": "ack", "id": "...", "phrase": "vale"}  short pre-rendered acknowledgement (vale | entendido | momento)
   {"cmd": "stop"}                                  silence now (the user started talking)
 stdout (ASCII JSON lines)
   {"type": "ready"}  {"type": "audio", "id", "seq", "rate", "pcm": base64 int16 mono}  {"type": "done", "id"}  {"type": "error"}
@@ -16,7 +16,6 @@ import base64
 import json
 import os
 import queue
-import random
 import re
 import sys
 import threading
@@ -33,11 +32,12 @@ def emit(obj):
         sys.stdout.flush()
 
 
-ACKS = [
-    "Vale, se lo paso a Claude.",
-    "Entendido, se lo digo.",
-    "Perfecto, se lo paso.",
-]
+# Short on purpose: they only cover the wait before Claude answers (VoiceConversation picks one).
+ACKS = {
+    "vale": "Vale.",
+    "entendido": "Entendido.",
+    "momento": "Un momento.",
+}
 
 
 def normalize(text):
@@ -83,7 +83,7 @@ class Speaker:
         self.lock = threading.Lock()
         self.model_lock = threading.Lock()
         self.current = None
-        self.acks = []
+        self.acks = {}
 
     def synth(self, text):
         with self.model_lock:  # an interrupted utterance may still be inside create(); never run two at once
@@ -95,14 +95,14 @@ class Speaker:
         return samples
 
     def prerender_acks(self):
-        for text in ACKS:
+        for key, text in ACKS.items():
             audio = None
             if self.edge_voice:
                 try:
                     audio = ("mp3", self.edge_mp3(text))
                 except Exception:
                     audio = None
-            self.acks.append((text, audio or ("pcm", self.synth(text))))
+            self.acks[key] = (text, audio or ("pcm", self.synth(text)))
 
     def edge_mp3(self, text):
         import asyncio
@@ -241,7 +241,8 @@ def main():
         if cmd == "speak" and msg.get("text"):
             speaker.speak(msg.get("id", ""), text=msg["text"])
         elif cmd == "ack" and speaker.acks:
-            speaker.speak(msg.get("id", "ack"), audio=random.choice(speaker.acks))
+            ack = speaker.acks.get(msg.get("phrase")) or speaker.acks["vale"]
+            speaker.speak(msg.get("id", "ack"), audio=ack)
         elif cmd == "stop":
             speaker.stop()
     speaker.stop()

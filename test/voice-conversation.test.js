@@ -209,3 +209,74 @@ test('a low-confidence recognition is not sent', () => {
   assert.equal(h.events('commit').length, 0);
   assert.equal(h.conv.snapshot().lowConfidence, true);
 });
+
+test('a turn deferred while Claude speaks is not sent if the user goes on talking', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.tts({ type: 'end', id: h.events('speak')[0].id });
+  h.say('Haz el cambio');
+  h.conv._speak('Un aviso de Claude.'); // defensive path: Claude talking when the deadline comes
+  const { id } = h.events('speak').at(-1);
+  h.advance(5000);
+  assert.equal(h.events('commit').length, 0, 'never answered while Claude talks');
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  h.conv.tts({ type: 'end', id });
+  assert.equal(h.events('commit').length, 0, 'not mid-sentence');
+  h.advance(700);
+  h.conv.stt({ type: 'speech', state: 'end', silence_ms: 700 });
+  h.advance(400);
+  h.conv.stt({ type: 'final', text: 'en la base de datos.', confidence: 0.9 });
+  h.advance(5000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Haz el cambio en la base de datos.']);
+});
+
+test('a failed delivery gives the spoken words back instead of losing them', () => {
+  const h = harness({ deliver: () => ({ ok: false, error: 'La llamada ya no existe.' }) });
+  const appended = [];
+  const errors = [];
+  h.conv.on('append', a => appended.push(a.text));
+  h.conv.on('error', e => errors.push(e.message));
+  h.conv.setCall(waitingCall());
+  h.say('Haz el cambio.');
+  h.advance(5000);
+  assert.deepEqual(appended, ['Haz el cambio.']);
+  assert.deepEqual(errors, ['La llamada ya no existe.']);
+  assert.equal(h.events('ack').length, 0);
+});
+
+test('an asynchronous delivery acknowledges once it resolves', async () => {
+  const h = harness({ deliver: () => Promise.resolve({ ok: true, route: 'answer' }) });
+  h.conv.setCall(waitingCall());
+  h.say('Haz el cambio.');
+  h.advance(5000);
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(h.events('ack').map(a => a.phrase), ['vale']);
+});
+
+test('leaving the call silences Claude and forgets its echo', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.conv.setCall(null);
+  assert.deepEqual(h.events('tts').map(t => t.action), ['stop']);
+  assert.equal(h.conv.snapshot().turn, 'idle');
+});
+
+test('measures how long the voice takes to go silent after a stop', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'He terminado el cambio.' });
+  h.conv.stt({ type: 'speech', state: 'start', onset_ms: 90 });
+  h.conv.stt({ type: 'partial', text: 'espera por qué no SQLite' });
+  h.advance(40);
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  assert.deepEqual(h.events('metric').filter(m => m.name === 'tts.stop_ms').map(m => m.ms), [40]);
+});
+
+test('typed text sent while a spoken draft is pending keeps both', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  h.say('Usa Supabase');
+  h.conv.submitTyped('y el plan gratuito.');
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Usa Supabase y el plan gratuito.']);
+});

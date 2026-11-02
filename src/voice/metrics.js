@@ -14,6 +14,8 @@ const FAILURES = [
 const LABELS = new Set(['kind', 'route', 'urgency', 'engine', 'source', 'turn', 'phase']);
 const NUMBERS = new Set(['chars', 'words', 'count', 'seq']);
 const LABEL = /^[a-z][a-z0-9_.-]{0,23}$/i;
+// Metric names are dotted identifiers ("bargein.stop_ms"); anything else is stored as "invalid".
+const NAME = /^[a-z][a-z0-9_]{0,23}(\.[a-z0-9_]{1,23}){0,3}$/;
 
 function percentile(values, p) {
   const v = values.filter(Number.isFinite).sort((a, b) => a - b);
@@ -31,7 +33,7 @@ class VoiceMetrics {
   }
 
   record(name, ms, extra = {}) {
-    const entry = { at: this.now(), name: String(name).slice(0, 48), ms: Number.isFinite(ms) ? Math.round(ms) : null };
+    const entry = { at: this.now(), name: NAME.test(String(name)) ? String(name) : 'invalid', ms: Number.isFinite(ms) ? Math.round(ms) : null };
     for (const [key, value] of Object.entries(extra || {})) {
       if (LABELS.has(key) && typeof value === 'string' && LABEL.test(value)) entry[key] = value;
       else if (NUMBERS.has(key) && Number.isFinite(value)) entry[key] = Math.round(value);

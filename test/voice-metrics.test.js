@@ -26,6 +26,8 @@ test('never stores or writes what the user or Claude said', () => {
   const m = new VoiceMetrics({ now: () => 7, sink: line => lines.push(line) });
   m.record('turn.endpoint_ms', 640, { text: 'mi contraseña es 1234', transcript: 'secreto', kind: 'stop', route: 'answer', chars: 21 });
   m.record('stt.final_ms', 900, { kind: 'quiero que borres todo el repositorio ahora mismo por favor' });
+  m.record('mi contraseña es 1234', 5);
+  assert.equal(m.entries().at(-1).name, 'invalid');
   const all = JSON.stringify(m.entries()) + lines.join('\n');
   assert.doesNotMatch(all, /contraseña|1234|secreto|borres/);
   assert.match(lines[0], /"route":"answer"/);

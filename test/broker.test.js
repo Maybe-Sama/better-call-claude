@@ -433,3 +433,86 @@ test('session modes still in use are not evicted', () => {
   assert.equal(broker.sessionMode('keep'), 'on');
   assert.ok(broker.sessionModes.size <= 1000);
 });
+
+// ── Speech said while Claude works (Voice First §17-18): queued per session, never lost ─────────
+
+function workingCall(broker, session = 'w1') {
+  const call = broker.receiveCompletion({ session_id: session, cwd: 'C:/work/web', last_assistant_message: 'Hecho.' }, { responder: () => {} });
+  broker.answer(call.id);
+  broker.submitUserText(call.id, 'Usa Supabase');
+  return call;
+}
+const tool = (session) => ({ session_id: session, tool_name: 'Bash', tool_input: { command: 'ls' } });
+
+test('speech said while Claude works is kept in order and delivered at the next PostToolUse', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  assert.equal(broker.queueUserSpeech(call.id, 'Ah, y no toques el login de Google.', 'queue').queued, true);
+  broker.queueUserSpeech(call.id, 'Y añade tests.', 'queue');
+  const queued = () => broker.getSnapshot().calls[0].messages.filter(m => m.kind === 'queued');
+  assert.equal(queued().length, 2);
+  assert.ok(queued().every(m => m.delivered === false), 'visible as pending until delivered');
+  assert.equal(broker.noteToolDone(tool('other-session')), null, 'sessions are isolated');
+  const out = broker.noteToolDone(tool('w1'));
+  assert.equal(out.hookSpecificOutput.hookEventName, 'PostToolUse');
+  const ctx = out.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.indexOf('no toques el login') >= 0 && ctx.indexOf('no toques el login') < ctx.indexOf('añade tests'), 'in order');
+  assert.ok(queued().every(m => m.delivered === true));
+  assert.equal(broker.noteToolDone(tool('w1')), null, 'delivered once');
+});
+
+test('an interrupt is worded as a correction that comes first', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  broker.queueUserSpeech(call.id, 'No, me he explicado mal: verde, no azul.', 'interrupt');
+  const ctx = broker.noteToolDone(tool('w1')).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /interrumpido/i);
+  assert.match(ctx, /verde, no azul/);
+});
+
+test('if Claude finishes first, its Stop continues with what the user said instead of ringing', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  broker.queueUserSpeech(call.id, 'Pruébalo también en el móvil.', 'queue');
+  let response;
+  const merged = broker.receiveCompletion({ session_id: 'w1', stop_hook_active: true, last_assistant_message: 'Ya está.' }, { responder: body => { response = body; } });
+  assert.equal(response.hookSpecificOutput.hookEventName, 'Stop');
+  assert.match(response.hookSpecificOutput.additionalContext, /móvil/);
+  assert.equal(merged.id, call.id);
+  assert.equal(merged.awaitingClaude, true, 'Claude keeps working');
+  assert.equal(merged.messages.at(-1).silent, true, 'the stale result is shown, not read aloud');
+});
+
+test('hanging up keeps undelivered speech for the next hook of that session', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  broker.queueUserSpeech(call.id, 'Y sube los cambios al acabar.', 'queue');
+  broker.hangup(call.id);
+  assert.match(broker.noteToolDone(tool('w1')).hookSpecificOutput.additionalContext, /sube los cambios/);
+});
+
+test('typing in the terminal delivers the pending speech with the prompt', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker);
+  broker.queueUserSpeech(call.id, 'Usa el tema oscuro.', 'queue');
+  assert.match(broker.notePrompt({ session_id: 'w1', prompt: 'sigue con lo tuyo' }), /tema oscuro/);
+  assert.equal(broker.notePrompt({ session_id: 'w1', prompt: 'otra cosa' }), null);
+});
+
+test('after "para", the next permission request is denied with the user\'s words', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  const call = workingCall(broker, 'p9');
+  broker.queueUserSpeech(call.id, 'Para, no borres esa carpeta.', 'interrupt');
+  let response;
+  const ringing = broker.receivePermission(permissionPayload('p9', 'rm -rf build'), body => { response = body; });
+  assert.equal(ringing, null, 'no call: the user already said no');
+  assert.equal(response.hookSpecificOutput.decision.behavior, 'deny');
+  assert.match(response.hookSpecificOutput.decision.message, /no borres esa carpeta/);
+});
+
+test('queueUserSpeech needs an existing call and some text', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  assert.equal(broker.queueUserSpeech('nope', 'hola').ok, false);
+  const call = workingCall(broker);
+  assert.equal(broker.queueUserSpeech(call.id, '   ').ok, false);
+});

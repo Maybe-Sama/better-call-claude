@@ -6,38 +6,20 @@ const minBtn = document.getElementById('minBtn');
 const closeBtn = document.getElementById('closeBtn');
 const serviceBanner = document.getElementById('serviceBanner');
 
-// Everything the user says is accumulated and sent once they have been silent this long:
-// short for questions/permissions ("la segunda", "sí"), longer for free replies to a result.
-const VOICE_SUBMIT_DELAY_MS = 1500;
-const VOICE_SUBMIT_DELAY_FREE_MS = 3000;
-// The transcribed text is always visible this long before it is sent, even if transcription was slow.
-const MIN_VISIBLE_COUNTDOWN_MS = 1200;
-// When the last words announce more ("y…", "pero…", "quiero añadir…"), the user is thinking, not done.
-const VOICE_SUBMIT_DELAY_THINKING_MS = 5000;
-const THINKING_TAIL = /(\b(y|o|e|u|pero|que|porque|entonces|adem[aá]s|tambi[eé]n|aparte|eh|em|mm|bueno|pues|a ver|o sea|es decir|como|tipo|luego|despu[eé]s|a[nñ]adir|decir|comentar|otra cosa)|\.\.\.|…|,)\s*[.,…]*\s*$/i;
-// Below this, recognitions are noise/echo guesses ("Orlando" 0.11, Whisper's "Gracias." 0.35) and are dropped.
-const MIN_STT_CONFIDENCE = 0.4;
-// How long after Claude stops speaking a recognition may still be its echo (Whisper delivers ~1 s late).
-const ECHO_TAIL_MS = 4000;
-
+// Turn-taking lives in the main process (src/voice/conversation.js); this window shows the call and
+// plays Claude's voice, reporting which sentence is playing so "sigue" / "repíteme" know where it was cut.
 let state = { calls: [], activeId: null, dnd: false, snoozeOptions: [] };
 let muted = false;
 let ttsSpeaking = false;
 let currentUtterance = null;
-const spokenKeys = new Set();
+let browserUtteranceId = null;
 let ringStopper = null;
-let partialText = '';
-let finalVoiceParts = [];
-let voiceSubmitTimer = null;
 let sttReady = false;
 let sttListening = false;
 let micLevel = 0;
-let lowConfidenceHint = false;
-let userSpeaking = false;
-let submitDeadline = 0;
-let speechEndedAt = 0;
 let lastSpokenText = '';
-let lastSpokenEndedAt = 0;
+// Snapshot of the conversation state from the main process (VoiceConversation.snapshot()).
+let voiceUi = { turn: 'idle', draft: '', partial: '', deadlineIn: null, holding: false, lowConfidence: false };
 let callStartedAt = null;
 let clockTimer = null;
 let spanishVoice = null;
@@ -76,7 +58,6 @@ function render() {
   else if (ringing) renderIncoming(ringing);
   else renderDashboard();
   syncRing(ringing && !active ? ringing : null);
-  if (active) maybeSpeakLatest(active);
 }
 
 function renderIncoming(call) {
@@ -124,12 +105,14 @@ function canRespond(call) {
 }
 
 function callStatusText(call) {
-  if (ttsSpeaking) return muted || !canRespond(call) ? 'Claude hablando…' : 'Claude hablando · micrófono abierto';
-  if (call.awaitingClaude) return 'Claude trabajando…';
-  if (!canRespond(call)) return 'Llamada informativa · cuelga cuando quieras';
+  if (ttsSpeaking) return muted ? 'Claude hablando…' : 'Claude hablando · te escucho';
   if (muted) return 'Micrófono silenciado · puedes escribir';
   if (!sttReady) return 'Preparando reconocimiento de voz…';
-  return sttListening ? 'Escuchando…' : 'Preparando micrófono…';
+  if (!sttListening) return 'Preparando micrófono…';
+  if (voiceUi.holding) return 'Te escucho…';
+  if (call.awaitingClaude) return 'Claude trabajando · te sigo escuchando';
+  if (!canRespond(call)) return 'Te escucho · se lo diré a Claude';
+  return 'Escuchando…';
 }
 
 function renderActive(call) {
@@ -139,7 +122,7 @@ function renderActive(call) {
   const draft = oldInput ? { value: oldInput.value, focused: document.activeElement === oldInput, start: oldInput.selectionStart, end: oldInput.selectionEnd } : null;
 
   const queued = state.calls.filter(c => c.status === 'queued').length;
-  const inputDisabled = !canRespond(call);
+  const answering = canRespond(call);
   main.innerHTML = `<section class="active-call">
     <div class="call-head">
       <div class="avatar" aria-hidden="true">C</div>
@@ -154,8 +137,8 @@ function renderActive(call) {
     <div class="call-controls">
       <div class="input-row">
         <button id="muteBtn" class="mic-btn ${muted ? 'muted' : ''}" title="${muted ? 'Activar micrófono' : 'Silenciar micrófono'}" aria-pressed="${muted}">${muted ? '⌁' : '●'}</button>
-        <input id="textInput" class="text-input" type="text" autocomplete="off" placeholder="${inputDisabled ? 'Claude no espera respuesta ahora' : 'Escribe o corrige lo dictado…'}" ${inputDisabled ? 'disabled' : ''}/>
-        <button id="sendBtn" class="send-btn" ${inputDisabled ? 'disabled' : ''}>Enviar</button>
+        <input id="textInput" class="text-input" type="text" autocomplete="off" placeholder="${answering ? 'Escribe o corrige lo dictado…' : 'Añade o corrige algo para Claude…'}"/>
+        <button id="sendBtn" class="send-btn">Enviar</button>
       </div>
       <div class="bottom-row">
         <div class="listen-state" id="listenState"><span class="level" aria-hidden="true"><span id="levelBar"></span></span><span id="listenText">${esc(callStatusText(call))}</span></div>
@@ -174,73 +157,74 @@ function renderActive(call) {
   document.getElementById('muteBtn').onclick = async () => { muted = !muted; await window.agentCall.setMuted(muted); render(); };
   document.getElementById('hangupBtn').onclick = async () => {
     stopSpeech();
-    clearVoiceDraft();
     await window.agentCall.hangup(call.id);
   };
 
   const input = document.getElementById('textInput');
-  if (draft && !inputDisabled) {
+  if (draft) {
     input.value = draft.value;
     if (draft.focused) {
       input.focus();
       try { input.setSelectionRange(draft.start, draft.end); } catch {}
     }
   }
-  // Starting to type takes over the voice draft so a misheard word can be corrected before sending.
-  const adoptVoiceDraft = () => {
-    const spoken = currentVoiceText();
+  // Starting to type takes over the voice draft so a misheard word can be corrected before sending;
+  // while the box has text, what the user says is appended to it.
+  const adoptVoiceDraft = async () => {
+    if (!voiceUi.draft && !voiceUi.partial) return;
+    const spoken = await window.agentCall.adoptDraft();
     if (!spoken) return;
-    cancelVoiceSubmit();
-    input.value = input.value ? `${input.value} ${spoken}` : spoken;
-    clearVoiceDraft();
+    input.value = input.value.trim() ? `${input.value.trim()} ${spoken}` : spoken;
+    window.agentCall.setTyping(true);
   };
   input.onfocus = adoptVoiceDraft;
   input.onkeydown = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); send(); return; }
     adoptVoiceDraft();
   };
+  input.oninput = () => window.agentCall.setTyping(Boolean(input.value.trim()));
+  // Enter with an empty box sends the spoken draft now. While Claude works, text is queued for it.
   const send = async () => {
     const value = input.value.trim();
     const current = activeCall();
-    if (!value && finalVoiceParts.length) return submitVoiceNow();
-    if (!value || !current || !canRespond(current)) return;
+    if (!current || (!value && !voiceUi.draft)) return;
     input.value = '';
-    clearVoiceDraft();
+    window.agentCall.setTyping(false);
     stopSpeech();
     const result = await window.agentCall.submitText(current.id, value).catch(err => ({ ok: false, error: err.message }));
-    if (result?.ok && result.resolved !== false) acknowledge();
     if (!result?.ok) {
       const box = document.getElementById('textInput');
-      if (box && !box.value) box.value = value;
+      if (box && !box.value && value) box.value = value;
       showBanner(result?.error || 'No se pudo enviar la respuesta.');
     }
-  };
-  document.getElementById('sendBtn').onclick = send;
+  };  document.getElementById('sendBtn').onclick = send;
 }
 
 function messageHtml(msg) {
   const role = msg.role === 'user' ? 'user' : msg.role === 'system' ? 'system' : 'assistant';
   const sender = role === 'user' ? 'Tú' : role === 'system' ? 'AgentCall' : 'Claude';
-  return `<div class="message ${role}"><div class="sender">${sender}</div><div class="bubble">${esc(msg.text)}</div></div>`;
+  const note = msg.kind === 'queued'
+    ? `<div class="queued-note">${msg.delivered ? 'Entregado a Claude' : 'Se lo diré a Claude en cuanto pueda'}</div>`
+    : '';
+  return `<div class="message ${role}"><div class="sender">${sender}</div><div class="bubble">${esc(msg.text)}</div>${note}</div>`;
 }
-
-function currentVoiceText() { return [...finalVoiceParts, partialText].join(' ').replace(/\s+/g, ' ').trim(); }
 
 function liveCaptionHtml(call = activeCall()) {
-  const final = finalVoiceParts.join(' ').trim();
-  if (final || partialText) {
-    const text = `${esc(final)}${partialText ? ` <span class="partial">${esc(partialText)}</span>` : ''}`;
-    if (!submitDeadline) return text;
-    const ms = Math.max(0, submitDeadline - Date.now());
-    return `${text}<div class="countdown" aria-hidden="true"><span style="animation-duration:${ms}ms"></span></div><div class="countdown-hint">Enviando… sigue hablando para añadir, o pulsa Enviar.</div>`;
+  const { draft, partial } = voiceUi;
+  if (draft || partial) {
+    const text = `${esc(draft)}${partial ? ` <span class="partial">${esc(partial)}</span>` : ''}`;
+    if (voiceUi.holding && voiceUi.deadlineIn == null) return `${text}<div class="countdown-hint">Te escucho. Sigue cuando quieras.</div>`;
+    if (voiceUi.deadlineIn == null) return text;
+    const where = call && !canRespond(call) ? 'Se lo diré a Claude' : 'Enviando';
+    return `${text}<div class="countdown" aria-hidden="true"><span style="animation-duration:${voiceUi.deadlineIn}ms"></span></div><div class="countdown-hint">${where}… sigue hablando para añadir, o pulsa Enviar.</div>`;
   }
-  if (call && call.awaitingClaude && call.messages.at(-1)?.role === 'user') return '<span class="partial">Enviado. Claude está trabajando; lo que digas ahora no se le envía.</span>';
-  if (lowConfidenceHint && call && canRespond(call) && !ttsSpeaking) return 'No te he entendido bien. Repítelo o escríbelo.';
-  if (!call || !canRespond(call)) return '<span class="partial">—</span>';
-  if (muted) return 'Micrófono silenciado. Puedes escribir tu respuesta.';
+  if (voiceUi.lowConfidence && !ttsSpeaking) return 'No te he entendido bien. Repítelo o escríbelo.';
+  if (!call) return '<span class="partial">—</span>';
+  if (muted) return 'Micrófono silenciado. Puedes escribir.';
+  if (call.awaitingClaude) return '<span class="partial">Claude está trabajando. Si quieres añadir o corregir algo, dilo.</span>';
+  if (!canRespond(call)) return '<span class="partial">Si quieres decirle algo a Claude, dilo o escríbelo.</span>';
   return sttListening ? 'Lo que digas aparecerá aquí en tiempo real…' : 'Preparando reconocimiento de voz…';
 }
-
 function updateLiveCaption() {
   const el = document.getElementById('liveCaption');
   if (el) el.innerHTML = liveCaptionHtml();
@@ -314,15 +298,6 @@ function pickSpanishVoice() {
 speechSynthesis.onvoiceschanged = pickSpanishVoice;
 pickSpanishVoice();
 
-function maybeSpeakLatest(call) {
-  const latest = [...(call.messages || [])].reverse().find(m => m.role === 'assistant');
-  if (!latest) return;
-  const key = `${call.id}:${latest.at}`;
-  if (spokenKeys.has(key)) return;
-  spokenKeys.add(key);
-  speak(latest.speech || latest.text);
-}
-
 function setTts(value) {
   if (ttsSpeaking === value) return;
   ttsSpeaking = value;
@@ -335,27 +310,30 @@ function setTts(value) {
 // same output as the ringtone, so it can be cut the instant the user starts talking. If Kokoro is not
 // available, Chromium's Windows voices are used instead.
 let ttsEngine = 'browser';
-let uttCounter = 0;
 let playback = { id: null, queue: [], current: null, done: false };
 
-function speak(text) {
+function progress(event) { try { window.agentCall.ttsProgress(event); } catch {} }
+
+// The main process decides what Claude says (id + text); this window plays it.
+function speak(id, text) {
   stopSpeech();
   const spoken = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!spoken) return;
+  if (!spoken) { progress({ type: 'end', id }); return; }
   setTts(true);
   lastSpokenText = spoken;
   if (ttsEngine === 'kokoro') {
-    const id = `u${++uttCounter}`;
     playback = emptyPlayback({ id });
-    const fallback = () => { if (playback.id === id) { playback = emptyPlayback(); speakWithBrowser(spoken); } };
+    const fallback = () => { if (playback.id === id) { playback = emptyPlayback(); speakWithBrowser(id, spoken); } };
     window.agentCall.ttsSpeak(id, spoken).then(ok => { if (!ok) { ttsEngine = 'browser'; fallback(); } }).catch(fallback);
     return;
   }
-  speakWithBrowser(spoken);
+  speakWithBrowser(id, spoken);
 }
 
-function speakWithBrowser(spoken) {
+function speakWithBrowser(id, spoken) {
   setTts(true);
+  browserUtteranceId = id;
+  progress({ type: 'chunk', id, seq: 0, text: spoken });
   const utterance = new SpeechSynthesisUtterance(spoken);
   if (!spanishVoice) pickSpanishVoice();
   if (spanishVoice) utterance.voice = spanishVoice;
@@ -364,7 +342,8 @@ function speakWithBrowser(spoken) {
   const finish = () => {
     if (currentUtterance !== utterance) return;
     currentUtterance = null;
-    speechFinished();
+    browserUtteranceId = null;
+    speechFinished(id);
   };
   utterance.onend = finish;
   utterance.onerror = finish;
@@ -372,11 +351,10 @@ function speakWithBrowser(spoken) {
   speechSynthesis.speak(utterance);
 }
 
-function speechFinished() {
-  lastSpokenEndedAt = Date.now();
+function speechFinished(id) {
+  progress({ type: 'end', id, interrupted: false });
   setTts(false);
   render();
-  if (finalVoiceParts.length) scheduleVoiceSubmit();
 }
 
 // Sentences arrive as MP3 (Edge) or raw PCM (Kokoro) and are played one after another with <audio>
@@ -390,7 +368,7 @@ function setVoiceRate(rate) {
   for (const el of [playback.current, ...(playback.queue || [])]) if (el) el.playbackRate = rate;
   const btn = document.getElementById('rateBtn');
   if (btn) btn.textContent = formatRate(rate);
-  if (currentUtterance) { const text = lastSpokenText; speechSynthesis.cancel(); currentUtterance = null; speakWithBrowser(text); }
+  if (currentUtterance) { const text = lastSpokenText; const id = browserUtteranceId; speechSynthesis.cancel(); currentUtterance = null; speakWithBrowser(id, text); }
 }
 
 function formatRate(rate) { return `${String(rate).replace('.', ',')}×`; }
@@ -420,6 +398,8 @@ function playAudioChunk(data) {
   }
   el.preservesPitch = true;
   el.playbackRate = voiceRate;
+  el.agentSeq = data.seq;
+  el.agentText = data.text || '';
   playback.queue.push(el);
   if (!playback.current) playNextChunk(playback.id);
 }
@@ -430,6 +410,7 @@ function playNextChunk(id) {
   if (!el) { maybeFinishPlayback(); return; }
   playback.current = el;
   el.playbackRate = voiceRate;
+  progress({ type: 'chunk', id, seq: el.agentSeq, text: el.agentText });
   const next = () => {
     URL.revokeObjectURL(el.src);
     if (playback.id !== id || playback.current !== el) return;
@@ -443,10 +424,10 @@ function playNextChunk(id) {
 
 function maybeFinishPlayback() {
   if (!playback.id || !playback.done || playback.current || playback.queue.length) return;
-  const wasAck = playback.ack;
+  const { id, ack } = playback;
   playback = emptyPlayback();
-  if (wasAck) { lastSpokenEndedAt = Date.now(); setTts(false); return; }
-  speechFinished();
+  if (ack) { progress({ type: 'end', id, interrupted: false }); setTts(false); return; }
+  speechFinished(id);
 }
 
 // Stop and release every <audio> element of the current utterance.
@@ -459,26 +440,25 @@ function discardPlayback() {
 
 function emptyPlayback(extra = {}) { return { id: null, queue: [], current: null, done: false, ...extra }; }
 
-// Instant "Vale, se lo paso a Claude." after the user's answer is sent, so the line never feels dead.
-function acknowledge() {
-  if (ttsEngine !== 'kokoro' || muted) return;
-  stopSpeech();
-  const id = `ack${++uttCounter}`;
+// Short acknowledgement chosen by the main process ("Vale.", "Un momento."); the worker already plays it.
+function playAck(id) {
+  if (ttsEngine !== 'kokoro') { progress({ type: 'end', id }); return; }
+  discardPlayback(); // never ttsStop here: the worker is already producing this acknowledgement
+  currentUtterance = null;
+  speechSynthesis.cancel();
   playback = emptyPlayback({ id, ack: true });
-  lastSpokenText = 'Vale, se lo paso a Claude. Entendido, se lo digo. Perfecto, se lo paso.';
   setTts(true);
-  window.agentCall.ttsAck(id);
 }
-
 function stopSpeech() {
-  const wasSpeaking = Boolean(currentUtterance || playback.id);
+  const id = playback.id || browserUtteranceId;
   if (playback.id) {
     window.agentCall.ttsStop();
     discardPlayback();
   }
   currentUtterance = null;
+  browserUtteranceId = null;
   speechSynthesis.cancel();
-  if (wasSpeaking) lastSpokenEndedAt = Date.now();
+  if (id) progress({ type: 'end', id, interrupted: true });
   setTts(false);
 }
 
@@ -486,13 +466,14 @@ window.agentCall.onTts(data => {
   if (data.type === 'ready') ttsEngine = 'kokoro'; // any worker engine (kokoro or edge) streams audio here
   else if (data.type === 'unavailable') {
     ttsEngine = 'browser';
-    if (playback.id && !playback.ack) { const text = lastSpokenText; discardPlayback(); speakWithBrowser(text); }
+    if (playback.id && !playback.ack) { const { id } = playback; const text = lastSpokenText; discardPlayback(); speakWithBrowser(id, text); }
   } else if (data.type === 'audio') playAudioChunk(data);
   else if (data.type === 'done' && data.id === playback.id) {
     if (!data.chunks && !data.interrupted && !playback.ack) {
       // The voice engine produced nothing (network/model error): say it with the Windows voice instead.
+      const { id } = playback;
       playback = emptyPlayback();
-      speakWithBrowser(lastSpokenText);
+      speakWithBrowser(id, lastSpokenText);
       return;
     }
     playback.done = true;
@@ -585,10 +566,8 @@ function bindQuickAnswers(call) {
   if (!box) return;
   const submit = async (choice) => {
     stopSpeech();
-    clearVoiceDraft();
     const result = await window.agentCall.submitChoice(call.id, choice).catch(err => ({ ok: false, error: err.message }));
     if (!result?.ok) showBanner(result?.error || 'No se pudo enviar la respuesta.');
-    else if (result.resolved !== false) acknowledge();
   };
   box.querySelectorAll('[data-choice]').forEach(btn => { btn.onclick = () => submit(btn.dataset.choice); });
   const q = call.currentQuestion;
@@ -607,76 +586,23 @@ function bindQuickAnswers(call) {
   if (send) send.onclick = () => submit(q.options.map(o => o.label).filter(l => multiPick.labels.has(l)));
 }
 
-// ── Voice answers ────────────────────────────────────────────────────────────
+// ── Voice commands from the main process ─────────────────────────────────────
 
-function cancelVoiceSubmit() {
-  const wasCounting = Boolean(submitDeadline);
-  if (voiceSubmitTimer) clearTimeout(voiceSubmitTimer);
-  voiceSubmitTimer = null;
-  submitDeadline = 0;
-  if (wasCounting) updateLiveCaption();
-}
-function clearVoiceDraft() { partialText = ''; finalVoiceParts = []; lowConfidenceHint = false; userSpeaking = false; speechEndedAt = 0; cancelVoiceSubmit(); updateLiveCaption(); }
-
-// Send once the user has been silent for VOICE_SUBMIT_DELAY_MS. Any new speech restarts the wait,
-// and everything said meanwhile is joined into one answer. Never sent while Claude is still speaking.
-function scheduleVoiceSubmit() {
-  cancelVoiceSubmit();
-  if (userSpeaking || ttsSpeaking) return; // re-armed when the user stops talking / Claude stops speaking
-  const call = activeCall();
-  const thinking = THINKING_TAIL.test(finalVoiceParts.at(-1) || '');
-  const silenceMs = thinking ? VOICE_SUBMIT_DELAY_THINKING_MS : call?.interactionKind === 'stop' ? VOICE_SUBMIT_DELAY_FREE_MS : VOICE_SUBMIT_DELAY_MS;
-  // Engines that report speech boundaries (Whisper) count the silence from when the user stopped.
-  const sinceSpeech = speechEndedAt ? Date.now() - speechEndedAt : 0;
-  const delay = Math.max(MIN_VISIBLE_COUNTDOWN_MS, silenceMs - sinceSpeech);
-  submitDeadline = Date.now() + delay;
-  voiceSubmitTimer = setTimeout(() => { voiceSubmitTimer = null; submitVoiceNow(); }, delay);
-  updateLiveCaption();
-}
-
-async function submitVoiceNow() {
-  cancelVoiceSubmit();
-  const call = activeCall();
-  const text = finalVoiceParts.join(' ').trim();
-  if (!call || !text || !canRespond(call)) return;
-  if (ttsSpeaking || userSpeaking) return scheduleVoiceSubmit();
-  const input = document.getElementById('textInput');
-  if (input && input.value.trim()) return; // the user is editing: they send with Enter
-  clearVoiceDraft();
-  const result = await window.agentCall.submitText(call.id, text).catch(err => ({ ok: false, error: err.message }));
-  if (result?.ok && result.resolved !== false) acknowledge();
-  if (!result?.ok) {
-    const box = document.getElementById('textInput');
-    if (box) box.value = box.value.trim() ? `${box.value.trim()} ${text}` : text;
-    showBanner(result?.error || 'No se pudo enviar la respuesta.');
+window.agentCall.onVoice(cmd => {
+  if (cmd.cmd === 'speak') speak(cmd.id, cmd.text);
+  else if (cmd.cmd === 'stop') stopSpeech();
+  else if (cmd.cmd === 'ack') playAck(cmd.id);
+  else if (cmd.cmd === 'error') showBanner(cmd.message);
+  else if (cmd.cmd === 'append') {
+    const input = document.getElementById('textInput');
+    if (input) input.value = input.value.trim() ? `${input.value.trim()} ${cmd.text}` : cmd.text;
   }
-}
+});
 
-const STOPWORDS = new Set(['que', 'los', 'las', 'del', 'por', 'para', 'con', 'una', 'uno', 'unos', 'unas', 'como', 'pero', 'mas', 'este', 'esta', 'eso', 'esto', 'muy', 'hay', 'sus', 'les', 'nos', 'ese', 'esa']);
-function contentWords(text) {
-  return String(text || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9ñ ]+/g, ' ').split(' ').filter(w => w.length >= 3 && !STOPWORDS.has(w));
-}
-
-// Without headphones Claude's voice reaches the microphone. A recognition made while (or just after)
-// Claude speaks whose words mostly come from what Claude is saying is its own echo, not the user.
-function isEcho(text) {
-  if (!ttsSpeaking && Date.now() - lastSpokenEndedAt > ECHO_TAIL_MS) return false;
-  const heard = contentWords(text);
-  if (!heard.length) return ttsSpeaking;
-  const spoken = new Set(contentWords(lastSpokenText));
-  const overlap = heard.filter(w => spoken.has(w)).length / heard.length;
-  return overlap >= 0.6;
-}
-
-// The user started talking over Claude: Claude goes quiet at once and listens.
-function bargeIn(heard = '') {
-  if (!ttsSpeaking) return;
-  (window.__bargeIns ||= []).push({ at: new Date().toLocaleTimeString(), heard, speaking: lastSpokenText.slice(0, 80) });
-  stopSpeech();
+window.agentCall.onVoiceUi(snapshot => {
+  voiceUi = snapshot || voiceUi;
   updateLiveCaption();
-}
-
+});
 function showBanner(message) {
   serviceBanner.classList.remove('hidden');
   serviceBanner.textContent = message;
@@ -688,17 +614,7 @@ window.agentCall.onStt(data => {
       sttReady = true;
       serviceBanner.classList.add('hidden');
       break;
-    case 'speech': {
-      const call = activeCall();
-      if (!call || !canRespond(call) || muted) return;
-      userSpeaking = data.state === 'start';
-      if (userSpeaking) cancelVoiceSubmit();
-      else {
-        speechEndedAt = Date.now();
-        if (finalVoiceParts.length) scheduleVoiceSubmit();
-      }
-      return;
-    }
+
     case 'engine':
       if (data.note) showBanner(data.note);
       break;
@@ -707,7 +623,6 @@ window.agentCall.onStt(data => {
       break;
     case 'paused':
       sttListening = false;
-      userSpeaking = false;
       micLevel = 0;
       break;
     case 'level':
@@ -720,40 +635,6 @@ window.agentCall.onStt(data => {
       serviceBanner.classList.remove('hidden');
       serviceBanner.textContent = `${data.message || 'No se pudo iniciar el reconocimiento de voz.'} ${data.hint || ''}`;
       break;
-    case 'partial': {
-      (window.__heard ||= []).push({ at: new Date().toLocaleTimeString(), partial: data.text, tts: ttsSpeaking, echo: isEcho(data.text) });
-      const call = activeCall();
-      if (!call || !canRespond(call) || muted) return;
-      if (ttsSpeaking) {
-        if (isEcho(data.text)) return; // Claude hearing itself through the speakers
-        if (contentWords(data.text).length >= 2) bargeIn(data.text);
-      }
-      partialText = data.text || '';
-      if (voiceSubmitTimer) scheduleVoiceSubmit();
-      break;
-    }
-    case 'final': {
-      const call = activeCall();
-      if (!call || !canRespond(call) || muted) return;
-      partialText = '';
-      if (!data.text) break;
-      const confidence = typeof data.confidence === 'number' ? data.confidence : 1;
-      lowConfidenceHint = confidence < MIN_STT_CONFIDENCE;
-      if (lowConfidenceHint || isEcho(data.text)) {
-        if (finalVoiceParts.length) scheduleVoiceSubmit();
-        break;
-      }
-      if (ttsSpeaking) bargeIn(data.text);
-      const input = document.getElementById('textInput');
-      if (input && input.value.trim()) {
-        // The user is correcting by keyboard: keep adding what they say to the text box.
-        input.value = `${input.value.trim()} ${data.text}`;
-        break;
-      }
-      finalVoiceParts.push(data.text);
-      scheduleVoiceSubmit();
-      break;
-    }
     default:
       return;
   }
@@ -766,7 +647,6 @@ window.agentCall.onState(next => {
   state = next;
   if (previousActive !== state.activeId) {
     resetCallClock();
-    clearVoiceDraft();
     if (!state.activeId) stopSpeech();
   }
   render();

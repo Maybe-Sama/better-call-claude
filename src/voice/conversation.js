@@ -70,6 +70,7 @@ class VoiceConversation extends EventEmitter {
     this.lastPlayed = null;        // the previous one (echo filter, "repíteme")
     this.interrupted = null;    // utterance cut by the user, for "sigue"
     this.pendingSpeak = null;   // a Claude message that arrived while the user was talking
+    this.stopping = null;       // { id, at }: stop requested, waiting for the renderer to confirm silence
     this.counter = 0;
     this.endpointTimer = null;
     this.holdTimer = null;
@@ -82,9 +83,12 @@ class VoiceConversation extends EventEmitter {
     const previous = this.call?.id || null;
     this.call = call || null;
     if ((call?.id || null) !== previous) {
+      // Another call (or none): nothing of the previous one may keep playing or count as echo.
+      if (this.playing) this._stopTts();
       this._resetDraft();
       this.interrupted = null;
       this.pendingSpeak = null;
+      this.lastPlayed = null;
     }
     this.kind = call?.interactionKind || null;
     this.turn = !call ? 'idle'
@@ -114,6 +118,10 @@ class VoiceConversation extends EventEmitter {
 
   // Playback progress reported by the renderer: 'chunk' when a sentence starts playing, 'end' when done.
   tts(ev) {
+    if (ev.type === 'end' && this.stopping?.id === ev.id) {
+      this._metric('tts.stop_ms', this.now() - this.stopping.at); // stop requested → playback silent
+      this.stopping = null;
+    }
     const cur = this.playing;
     if (!cur || ev.id !== cur.id) return;
     if (ev.type === 'chunk') {
@@ -122,7 +130,7 @@ class VoiceConversation extends EventEmitter {
       cur.current = ev.seq;
     } else if (ev.type === 'end') {
       this._finishTts(Boolean(ev.interrupted));
-      if (this.deferredCommit) { this.deferredCommit = false; this._onDeadline(); }
+      if (this.deferredCommit && !this.userSpeaking) { this.deferredCommit = false; this._onDeadline(); }
     }
     this._ui();
   }
@@ -141,7 +149,8 @@ class VoiceConversation extends EventEmitter {
   // Enter / Enviar. Empty text sends the spoken draft right away.
   submitTyped(text) {
     const clean = String(text || '').trim();
-    const value = clean || this._draftText();
+    // A spoken draft nobody adopted still belongs to this turn: it goes first, never dropped.
+    const value = [this._draftText(), clean].filter(Boolean).join(' ').trim();
     this.typing = false;
     if (!value) return { ok: false, error: 'No hay nada que enviar.' };
     return this._commit(value, 'typed');
@@ -151,6 +160,7 @@ class VoiceConversation extends EventEmitter {
 
   _speechStart(ev) {
     this.userSpeaking = true;
+    this.deferredCommit = false; // the user went on talking: the turn is not over
     this.speechStartAt = this.now() - (Number(ev.onset_ms) || 0);
     this.sawPartial = false;
     this._clearHoldTimer();
@@ -170,7 +180,7 @@ class VoiceConversation extends EventEmitter {
   _partial(text) {
     if (this.speaking() || this._inEchoTail()) {
       if (this._isEcho(text)) return; // Claude hearing itself through the speakers
-      if (this.speaking() && contentWords(text).length >= 2) this._bargeIn();
+      if (this.speaking() && contentWords(text).length >= 2) this._bargeIn('parcial');
     }
     if (!this.sawPartial && this.speechStartAt) this._metric('stt.first_partial_ms', this.now() - this.speechStartAt);
     this.sawPartial = true;
@@ -185,13 +195,14 @@ class VoiceConversation extends EventEmitter {
     const policy = this._policy();
     if (!text || confidence < MIN_CONFIDENCE || this._isEcho(text)) {
       this.lowConfidence = Boolean(text) && confidence < MIN_CONFIDENCE;
+      if (text) this._debug(this.lowConfidence ? `descarto (confianza ${confidence}): «${text}»` : `eco de Claude: «${text}»`);
       policy.final(this.now(), '', 0); // re-times the turn without adding anything
       this._arm();
       this._armHold();
       return;
     }
     this.lowConfidence = false;
-    if (this.speaking()) this._bargeIn();
+    if (this.speaking()) this._bargeIn('final');
     if (this.typing) { this.emit('append', { text }); return; }
     policy.final(this.now(), text, confidence);
     this._arm();
@@ -236,14 +247,16 @@ class VoiceConversation extends EventEmitter {
   }
 
   // The user talked over Claude: silence at once, remember where it was cut.
-  _bargeIn() {
+  _bargeIn(reason) {
     if (!this.playing) return;
+    this._debug(`interrumpe a Claude (${reason})`);
     if (this.speechStartAt) this._metric('bargein.stop_ms', this.now() - this.speechStartAt);
     if (!this.playing.ack) this.interrupted = { ...this.playing, chunks: new Map(this.playing.chunks) };
     this._stopTts();
   }
 
   _stopTts() {
+    if (this.playing) this.stopping = { id: this.playing.id, at: this.now() };
     this.emit('tts', { action: 'stop' });
     this._finishTts(true);
   }
@@ -312,12 +325,13 @@ class VoiceConversation extends EventEmitter {
   }
 
   _onDeadline() {
-    if (this.playing && !this.playing.ack) { this.deferredCommit = true; return; } // never answer while Claude is still talking
+    if (this.playing && !this.playing.ack) { this.deferredCommit = true; this._debug('fin de turno aplazado: Claude habla'); return; } // never answer while Claude is still talking
     const spoken = this.policy ? this.policy.take() : '';
     const text = [this.prefix, spoken].filter(Boolean).join(' ').trim();
     if (!text) return this._ui();
     if (!this.prefix && this._localIntent(text)) { this._resetDraft(); return this._ui(); }
     if (HOLD_ONLY.test(fold(text))) {
+      this._debug(`espera: «${text}»`);
       // "Espera…": Claude stops and listens; the words stay as the start of what comes next.
       this.prefix = text;
       this.holding = true;
@@ -354,14 +368,35 @@ class VoiceConversation extends EventEmitter {
       source,
     };
     if (source === 'voice' && this.speechEndAt) this._metric('turn.endpoint_ms', this.now() - this.speechEndAt);
+    this._debug(`envía (${route}${commit.urgency ? ` ${commit.urgency}` : ''}, ${source}): «${text}»`);
     this._resetDraft();
     if (route === 'answer') this.pendingSpeak = null; // the user moved on: an unheard older message is stale
     this.emit('commit', commit);
-    const result = this.deliver ? this.deliver(commit) : null;
-    if (result) this.committed({ ...commit, ...result });
+    let result = null;
+    try { result = this.deliver ? this.deliver(commit) : null; } catch (err) { result = { ok: false, error: err?.message || String(err) }; }
+    if (result && typeof result.then === 'function') {
+      return result.then(r => this._delivered(commit, r), err => this._delivered(commit, { ok: false, error: err?.message || String(err) }));
+    }
+    return this._delivered(commit, result);
+  }
+
+  // After delivery. A failure gives spoken words back (to the text box) so nothing said is lost.
+  _delivered(commit, result) {
+    if (result && result.ok === false) {
+      if (commit.source === 'voice') this.emit('append', { text: commit.text });
+      this.emit('error', { message: result.error || 'No se pudo enviar a Claude.' });
+    } else if (result) {
+      this.committed({ ...commit, ...result });
+    }
     if (this.pendingSpeak) this._flushPendingSpeak();
     this._ui();
     return result;
+  }
+
+  // A quick-answer button (or anything outside the voice draft) answered the call.
+  clearDraft() {
+    this._resetDraft();
+    this._ui();
   }
 
   // Acknowledge only what deserves it: never after "para"/"espera", "un momento" before a clarification.
@@ -410,6 +445,9 @@ class VoiceConversation extends EventEmitter {
   _ui() { this.emit('ui', this.snapshot()); }
 
   _metric(name, ms) { if (Number.isFinite(ms)) this.emit('metric', { name, ms: Math.round(ms) }); }
+
+  // Decisions for the console log (like the STT finals already are); never written to disk by this module.
+  _debug(message) { this.emit('debug', message); }
 }
 
 module.exports = { VoiceConversation, classifyUrgency, contentWords, HOLD_MS, ACK_TEXT };

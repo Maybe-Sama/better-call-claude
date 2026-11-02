@@ -138,3 +138,4 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .quick-answers { max-height: 210px; }
 .quick-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .quick-desc { font-size: 10px; font-weight: 500; color: var(--muted); line-height: 1.35; }
+.queued-note { font-size: 10px; color: var(--muted); padding: 0 4px; }
