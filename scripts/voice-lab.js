@@ -25,11 +25,12 @@ const PYTHON = path.join(DATA, 'whisper-venv', 'Scripts', 'python.exe');
 const GPU_PYTHON = path.join(DATA, 'gpu-venv', 'Scripts', 'python.exe');
 const POLICIES = { legacy: LegacyEndpointer, adaptive: AdaptiveEndpointer };
 
-// What Claude said before each scenario, as the app passes it to Whisper (sttContextFor in main.js).
+// What Claude said before each scenario, turned into Whisper context exactly as the app does.
+const { sttContextFor } = require('../src/voice/stt-context');
 function contextFor(sc) {
-  if (sc.kind === 'permission') return { text: 'Claude pide permiso para usar Bash. Ejecutar npm test. ¿Lo permites?', hotwords: 'sí, no, adelante, vale, Bash' };
-  if (sc.kind === 'ask') return { text: `¿Qué base de datos prefieres? ${sc.options.join(', ')}.`, hotwords: sc.options.join(', ') };
-  return { text: 'He terminado el cambio de autenticación y las pruebas pasan. ¿Seguimos?', hotwords: '' };
+  if (sc.kind === 'permission') return sttContextFor({ interactionKind: 'permission', messages: [{ role: 'assistant', text: 'Claude pide permiso para usar Bash. Ejecutar npm test. ¿Lo permites?' }] });
+  if (sc.kind === 'ask') return sttContextFor({ interactionKind: 'ask', messages: [{ role: 'assistant', text: `¿Qué base de datos prefieres?\n${sc.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}` }] });
+  return sttContextFor({ interactionKind: 'stop', messages: [{ role: 'assistant', text: 'He terminado el cambio de autenticación y las pruebas pasan. ¿Seguimos?' }] });
 }
 
 function arg(name, fallback) {

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('agentCall', {
   setTyping: (value) => ipcRenderer.send('agentcall:set-typing', Boolean(value)),
   ttsProgress: (event) => ipcRenderer.send('agentcall:tts-progress', event),
   voiceMetrics: () => ipcRenderer.invoke('agentcall:voice-metrics'),
+  startStream: (options) => ipcRenderer.invoke('agentcall:start-stream', options),
   onVoice: (callback) => ipcRenderer.on('agentcall:voice', (_event, data) => callback(data)),
   onVoiceUi: (callback) => ipcRenderer.on('agentcall:voice-ui', (_event, data) => callback(data)),
   // Echo-cancelled microphone capture (src/renderer/capture.js).

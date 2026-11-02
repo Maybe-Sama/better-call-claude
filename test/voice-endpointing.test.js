@@ -157,3 +157,38 @@ test('adaptive: engines without voice events (Windows dictation) still wait whil
   assert.notEqual(p.deadline, null);
   assert.equal(p.take(), 'Haz el cambio en la base de datos. y luego sube los cambios a producción.');
 });
+
+// Live test 2026-11-02 (real voice): a long reading was cut at the third pause between sentences,
+// and a deliberate pause after "y luego" was cut at 2.8 s.
+test('adaptive: a long, multi-sentence turn gets more patience between sentences', () => {
+  const p = new AdaptiveEndpointer({ kind: 'stop' });
+  const phrase = (start, end, text) => {
+    p.speechStart(start);
+    p.speechEnd(end + 700, { silenceMs: 700 });
+    p.final(end + 1300, text);
+  };
+  phrase(0, 4000, 'La idea es sencilla.');
+  const firstFloor = p.deadline - 4000;
+  phrase(5000, 9000, 'La pantalla de pagos tiene que enseñar el saldo arriba del todo.');
+  phrase(10000, 14000, 'Debajo, el historial de los últimos seis meses.');
+  assert.ok(p.deadline - 14000 >= 2400, `after 3 sentences: ${p.deadline - 14000}`);
+  assert.ok(firstFloor < p.deadline - 14000, 'more patience as the turn grows');
+});
+
+test('adaptive: words that ask for more ("y luego", "pues") wait at least 4.5 s', () => {
+  const wait = turn(new AdaptiveEndpointer({ kind: 'stop' }), 'Cambia el endpoint de Stripe, actualiza el webhook y luego');
+  assert.ok(wait >= 4500, String(wait));
+});
+
+// Live test round 2 (real voice): "Polo azul." 0.55 and "Y por ahí." 0.47 (a misheard "Espera.") were
+// sent at once and cut the speaker's deliberate pause; "Mirad una cosa." announced more.
+test('adaptive: a doubtful transcript waits as if unfinished', () => {
+  assert.ok(turn(new AdaptiveEndpointer({ kind: 'stop' }), 'Polo azul.', { confidence: 0.55 }) >= 4500);
+  assert.ok(turn(new AdaptiveEndpointer({ kind: 'stop' }), 'Ponlo azul.', { confidence: 0.92 }) < 2000);
+});
+
+test('adaptive: phrases that announce more wait ("una cosa", "te cuento", "mira", "es que")', () => {
+  for (const text of ['Mira, haz una cosa.', 'Vale, te cuento.', 'Mira.', 'Es que.', 'Lo que quiero es.', 'Escucha.']) {
+    assert.ok(turn(new AdaptiveEndpointer({ kind: 'stop' }), text) >= 4500, text);
+  }
+});

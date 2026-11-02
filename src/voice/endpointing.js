@@ -81,7 +81,9 @@ const ADAPTIVE = {
   completeFloorMs: 1000, // free reply; 800 when answering a question
   openMs: 900,          // no closing punctuation, but nothing announcing more either
   openFloorMs: 1600,
-  unfinishedMs: 2800,   // conjunction, filler, comma, "…", "luego", "un momento": the user is still thinking
+  unfinishedMs: 4500,   // conjunction, filler, comma, "…", "luego", "un momento": the user is still thinking
+  perPhraseMs: 700,     // a turn of several phrases (explaining, reading) gets this much more patience per phrase
+  maxPhraseBonusMs: 2000,
   finalTimeoutMs: 6000, // safety: a transcript that never arrives does not block the turn forever
   minConfidence: 0.4,
 };
@@ -92,6 +94,10 @@ function fold(text) {
 }
 
 const UNFINISHED_EXTRA = /(\b(primero|segundo|despues|antes|mientras|cuando|aunque|osea|o sea)|:)\s*$/;
+// The phrase announces what comes next ("mira, una cosa:", "te cuento", "es que…").
+const ANNOUNCES = /(^|\W)(una cosa|otra cosa|te cuento|te digo|mira|escucha|fijate|es que|lo que quiero( es)?|lo que pasa( es)?( que)?|la cosa es( que)?|a ver si|resulta que)[\s.,…:!]*$/;
+// Below this confidence a transcript is probably a cut or garbled phrase: give the user time.
+const DOUBTFUL_CONFIDENCE = 0.6;
 // The last phrase only asks for time.
 const HOLD_TAIL = /(^|[.,;!?]\s*)(no,? )?(espera|un momento|un segundo|dejame pensar|deja que piense|a ver|eh|em|mm|pues|bueno)[\s.,…!]*$/;
 const SHORT_ANSWER = /^(si|no|vale|ok|okay|claro|venga|dale|adelante|de acuerdo|perfecto|correcto|hazlo|mejor no|para nada|ninguna|ninguno|todas|todos|(la |el |opcion )?(primera|segunda|tercera|cuarta|ultima|primero|segundo|tercero|cuarto|ultimo|uno|dos|tres|cuatro|[a-e]))\b/;
@@ -139,7 +145,10 @@ class AdaptiveEndpointer extends LegacyEndpointer {
   final(t, text, confidence = 1) {
     if (!this.vadEvents) this.speaking = false; // without voice events, a final closes the phrase
     this.pendingFinals = Math.max(0, this.pendingFinals - 1);
-    if (text && confidence >= ADAPTIVE.minConfidence) this.parts.push(fixShortAnswer(text, this.options));
+    if (text && confidence >= ADAPTIVE.minConfidence) {
+      this.parts.push(fixShortAnswer(text, this.options));
+      this.lastConfidence = confidence;
+    }
     this._schedule(t);
   }
 
@@ -157,7 +166,9 @@ class AdaptiveEndpointer extends LegacyEndpointer {
     const answering = this.kind === 'permission' || this.kind === 'ask';
     let wait;
     let floor;
-    if (THINKING_TAIL.test(last) || UNFINISHED_EXTRA.test(fold(last)) || HOLD_TAIL.test(fold(last))) {
+    const folded = fold(last);
+    const doubtful = (this.lastConfidence ?? 1) < DOUBTFUL_CONFIDENCE && !(answering && this.isShortAnswer(this.text()));
+    if (THINKING_TAIL.test(last) || UNFINISHED_EXTRA.test(folded) || HOLD_TAIL.test(folded) || ANNOUNCES.test(folded) || doubtful) {
       wait = ADAPTIVE.unfinishedMs;
       floor = 0;
     } else if (answering && this.isShortAnswer(this.text())) {
@@ -170,6 +181,9 @@ class AdaptiveEndpointer extends LegacyEndpointer {
       wait = ADAPTIVE.openMs;
       floor = ADAPTIVE.openFloorMs;
     }
+    // Someone explaining or reading at length pauses between sentences: the longer the turn, the
+    // longer a pause has to be before it counts as the end.
+    if (floor) floor += Math.min(ADAPTIVE.maxPhraseBonusMs, ADAPTIVE.perPhraseMs * (this.parts.length - 1));
     const ended = this.speechEndedAt || t;
     const stopped = this.voiceStoppedAt ?? ended;
     this.deadline = Math.max(t + wait, ended + ADAPTIVE.minSilenceMs, stopped + floor);

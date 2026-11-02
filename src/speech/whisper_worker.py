@@ -56,6 +56,14 @@ HALLUCINATIONS = re.compile(
     re.IGNORECASE,
 )
 
+# The same word or short group 4+ times in a row is a decoding loop, not speech ("Haz Haz Haz…").
+REPEATS = re.compile(r"\b(\w+(?:[\s,]+\w+){0,3}?)(?:[\s,]+\1\b){3,}", re.IGNORECASE)
+
+
+def collapse_repeats(text):
+    return REPEATS.sub(r"\1", text)
+
+
 DEFAULT_PROMPT = (
     "Conversación con Claude Code sobre un proyecto de software. "
     "Términos: Claude, Supabase, Vercel, Next.js, React, TypeScript, JavaScript, API, commit, deploy, "
@@ -225,7 +233,9 @@ class Transcriber(threading.Thread):
             language=self.language,
             beam_size=5 if final else 1,
             best_of=1,
-            temperature=0.0,
+            # Finals retry at higher temperature when the text looks like a loop (compression ratio).
+            temperature=[0.0, 0.2, 0.4] if final else 0.0,
+            compression_ratio_threshold=2.4,
             condition_on_previous_text=False,
             initial_prompt=self.current_prompt(),
             hotwords=self.hotwords,
@@ -237,7 +247,7 @@ class Transcriber(threading.Thread):
         for seg in segments:
             if seg.no_speech_prob > 0.6 and seg.avg_logprob < -0.8:
                 continue
-            t = seg.text.strip()
+            t = collapse_repeats(seg.text.strip())
             if not t or HALLUCINATIONS.search(t):
                 continue
             texts.append(t)

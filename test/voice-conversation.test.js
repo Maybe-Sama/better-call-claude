@@ -112,7 +112,7 @@ test('while Claude works, a lone "espera" becomes an interrupt after the hold', 
   h.say('Espera, espera.');
   h.advance(3000);
   assert.equal(h.events('commit').length, 0);
-  h.advance(HOLD_MS);
+  h.advance(HOLD_MS + 5000); // the end-of-turn wait for "espera" (4.5 s) plus the hold
   const [commit] = h.events('commit');
   assert.equal(commit.urgency, 'interrupt');
   assert.equal(commit.text, 'Espera, espera.');

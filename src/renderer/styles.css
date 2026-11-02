@@ -146,3 +146,4 @@ main { min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .metrics-head { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; }
 .metrics-head span, .metrics-fail { color: var(--muted); font-weight: 400; }
 .metrics-fail { margin-top: 6px; }
+.call-claude { width: 100%; margin: 4px 0 14px; }

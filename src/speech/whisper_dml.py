@@ -88,6 +88,8 @@ class DmlWhisper:
             if token == self.eot:
                 break
             tokens.append(token)
+            if _looping(tokens):  # greedy decoding stuck ("Haz Haz Haz…", live test 2026-11-02)
+                break
             feed = {"input_ids": np.array([[token]], dtype=np.int64)}
             for name in self.past_inputs:
                 if name.startswith("past_key_values"):
@@ -103,6 +105,16 @@ class DmlWhisper:
         text = self.tok.decode(tokens, skip_special_tokens=True).strip()
         avg = sum(logprobs) / len(logprobs) if logprobs else -10.0
         return [Segment(text=text, avg_logprob=avg, no_speech_prob=no_speech_prob)] if text else [], None
+
+
+def _looping(tokens):
+    """True when the last tokens repeat a short group: 1–2 tokens four times, 3–6 tokens three times.
+    The repetition is cut back to one copy."""
+    for n, times in ((1, 4), (2, 4), (3, 3), (4, 3), (5, 3), (6, 3)):
+        if len(tokens) >= n * times and all(tokens[-n:] == tokens[-n * (k + 1):len(tokens) - n * k] for k in range(1, times)):
+            del tokens[-n * (times - 1):]
+            return True
+    return False
 
 
 def _softmax(x):

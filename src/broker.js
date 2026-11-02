@@ -651,6 +651,11 @@ class CallBroker extends EventEmitter {
     this._changed();
   }
 
+  // A message object of the call was updated in place (e.g. marked delivered).
+  messagesChanged(callId) {
+    if (this.calls.has(callId)) this._changed('message', { id: callId });
+  }
+
   addCallMessage(callId, message) {
     const call = this.calls.get(callId);
     if (!call || !message) return null;

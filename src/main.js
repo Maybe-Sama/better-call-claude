@@ -1,6 +1,7 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } = require('electron');
+const os = require('node:os');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -9,6 +10,7 @@ const { CallBroker, MIN_RESULT_TURN_MS } = require('./broker');
 const { readSessionTitle } = require('./session-title');
 const { VoiceConversation, classifyUrgency } = require('./voice/conversation');
 const { VoiceMetrics, jsonlSink } = require('./voice/metrics');
+const { sttContextFor } = require('./voice/stt-context');
 
 // Optional user settings in %LOCALAPPDATA%AgentCallconfig.json, e.g.
 //   {"mic": "IN 1 (BEHRINGER", "voice": "ef_dora", "whisperModel": "small", "vocab": "Eureka, Supabase"}
@@ -642,6 +644,12 @@ const metrics = new VoiceMetrics({
 
 function routeUserText({ callId, sessionId, text, urgency, source }) {
   const call = broker.calls.get(callId);
+  // Controlled call with nothing held: straight to that Claude session (new turn, addition or correction).
+  if (call?.stream && !(call.responder && !call.resolved) && streamCalls?.owns(callId)) {
+    const result = streamCalls.say(callId, text, urgency || classifyUrgency(text));
+    log(`Voz → sesión controlada ${result.route}${urgency === 'interrupt' ? ' (interrumpe)' : ''} (${String(text).length} caracteres, ${source})`);
+    return result;
+  }
   if (!call) {
     // The call ended mid-sentence (hung up, replaced): the words still go to that session.
     if (!sessionId) return { ok: false, error: 'Esta llamada ya no existe.' };
@@ -679,29 +687,75 @@ voice.on('metric', ({ name, ms }) => metrics.record(name, ms));
 voice.on('debug', message => log(`Voz: ${message}`));
 voice.on('failure', category => { try { metrics.fail(category); } catch {} });
 
-// The microphone opens as soon as the call is answered and stays open while Claude speaks and works.
-// Recognition context for the active call: the question and its options, or the key terms of Claude's message.
-function sttContextFor(call) {
-  const last = [...(call.messages || [])].reverse().find(m => m.role === 'assistant');
-  if (!last) return null;
-  const text = String(last.text || '');
-  let hotwords = [];
-  if (call.interactionKind === 'ask') {
-    hotwords = text.split('\n').map(l => /^\d+\.\s+(.+?)(\s+—\s+|$)/.exec(l)?.[1]).filter(Boolean)
-      .map(label => label.replace(/\s*\([^)]*\)\s*/g, ' ').trim());
-  } else if (call.interactionKind === 'permission') {
-    hotwords = ['sí', 'no', 'adelante', 'vale'];
-  }
-  // Proper nouns, camelCase identifiers and file names from Claude's message ("Vercel", "NextAuth", "app.js").
-  const terms = text.match(/\b(?:[A-ZÁÉÍÓÚÑ][\w.+#-]*[A-Za-z0-9]|[a-z]+[A-Z]\w*|[\w-]+\.(?:js|ts|tsx|py|md|json|mp4|html|css))\b/g) || [];
-  hotwords = [...new Set([...hotwords, ...terms.filter(t => t.length > 2)])].slice(0, 24);
-  // Numbered option lists in the prompt make Whisper echo the numbers ("4. NextAuth"): send plain prose.
-  const prose = call.interactionKind === 'ask'
-    ? `${text.split('\n')[0]} ${hotwords.slice(0, 6).join(', ')}.`
-    : text.replace(/^\s*\d+[.)]\s+/gm, '');
-  return { text: prose.replace(/\s+/g, ' ').slice(0, 400), hotwords: hotwords.join(', ') };
+// ── Controlled calls: "Llamar a Claude" (src/voice/stream-call.js) ──────────
+// AgentCall starts and drives a Claude Code session itself (stream-json), so Claude talks while it
+// writes and can really be interrupted. Loaded lazily: hook mode keeps working without these modules.
+let streamCalls = null;
+function streamController() {
+  if (streamCalls) return streamCalls;
+  const { StreamCallController } = require('./voice/stream-call');
+  const { StreamSession } = require('./voice/stream-session');
+  const { SpeechChunker } = require('./voice/speech-chunker');
+  streamCalls = new StreamCallController({
+    broker,
+    voice,
+    createSession: ({ cwd, resume }) => new StreamSession({ cwd, resume }),
+    createChunker: () => new SpeechChunker(),
+    log,
+  });
+  return streamCalls;
 }
 
+// The newest Claude Code conversation recorded for a folder (~/.claude/projects/<folder as dashes>).
+function latestSessionFor(cwd) {
+  const dir = path.join(os.homedir(), '.claude', 'projects', String(cwd).replace(/[^A-Za-z0-9]/g, '-'));
+  try {
+    return fs.readdirSync(dir).filter(f => f.endsWith('.jsonl'))
+      .map(f => ({ id: f.slice(0, -6), mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)[0] || null;
+  } catch { return null; }
+}
+
+function lastKnownCwd() {
+  let best = null;
+  for (const s of broker.sessions.values()) if (s.cwd && (!best || (s.lastPromptAt || 0) > (best.lastPromptAt || 0))) best = s;
+  return best?.cwd || os.homedir();
+}
+
+// options.cwd / options.fresh skip the dialogs (tests and automation); the button always asks.
+async function startStreamCall(options = {}) {
+  if (broker.activeId) return { ok: false, error: 'Ya estás en una llamada.' };
+  let cwd = typeof options.cwd === 'string' && fs.existsSync(options.cwd) ? options.cwd : null;
+  if (!cwd) {
+    const pick = await dialog.showOpenDialog(mainWindow, { title: 'Llamar a Claude: ¿en qué proyecto?', defaultPath: lastKnownCwd(), properties: ['openDirectory'] });
+    if (pick.canceled || !pick.filePaths?.[0]) return { ok: false, cancelled: true };
+    cwd = pick.filePaths[0];
+  }
+  let resume = null;
+  const last = options.fresh ? null : latestSessionFor(cwd);
+  if (last) {
+    const answer = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Continuar la última conversación', 'Conversación nueva', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      message: '¿Sigues donde lo dejaste?',
+      detail: `Última conversación en esta carpeta: ${new Date(last.mtime).toLocaleString()}.\nSi sigue abierta en una terminal, ciérrala antes: dos procesos en la misma conversación la parten en dos.`,
+    });
+    if (answer.response === 2) return { ok: false, cancelled: true };
+    if (answer.response === 0) resume = last.id;
+  }
+  try {
+    const call = await streamController().start({ cwd, resume });
+    return { ok: true, id: call.id };
+  } catch (err) {
+    log(`Llamada controlada: ${err.message}`);
+    return { ok: false, error: `No se pudo abrir la sesión de Claude: ${err.message}` };
+  }
+}
+
+// The microphone opens as soon as the call is answered and stays open while Claude speaks and works.
+// Recognition context for the active call: vocabulary only (src/voice/stt-context.js).
 function reconcileStt(active = activeCall()) {
   if (!stt) return;
   if (!active) { syncCapture(false); return stt.idle(); }
@@ -774,6 +828,7 @@ function registerIpc() {
   ipcMain.on('agentcall:capture-status', (_e, status) => onCaptureStatus(status));
   ipcMain.on('agentcall:tts-progress', (_e, event) => { if (event && typeof event === 'object') voice.tts(event); });
   ipcMain.handle('agentcall:voice-metrics', () => metrics.summary());
+  ipcMain.handle('agentcall:start-stream', (_e, options) => startStreamCall(options && typeof options === 'object' ? options : {}));
   ipcMain.handle('agentcall:set-muted', (_e, value) => { log(`UI: micrófono ${value ? 'silenciado' : 'activo'}`); muted = Boolean(value); voice.setMuted(muted); reconcileStt(); return muted; });
   ipcMain.handle('agentcall:set-tts', (_e, value) => { ttsSpeaking = Boolean(value); reconcileStt(); return ttsSpeaking; });
   ipcMain.handle('agentcall:tts-speak', (_e, { id, text }) => tts.send({ cmd: 'speak', id, text }));
@@ -801,6 +856,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   quitting = true;
+  streamCalls?.closeAll();
   stt?.stop();
   tts.stop();
   // Release every held hook so no Claude session stays blocked on a closed AgentCall.

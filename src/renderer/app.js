@@ -255,10 +255,20 @@ function renderDashboard() {
       <div><h1>Centralita</h1><div class="dashboard-sub">Claude te llama solo cuando merece tu atención.</div></div>
       <div class="state-chip ${state.dnd ? 'dnd' : ''}">${state.dnd ? 'No molestar' : 'Disponible'}</div>
     </div>
+    <button class="primary call-claude" id="callClaudeBtn">Llamar a Claude</button>
     ${calls.length
       ? `<div class="list-label">Pendientes</div><div class="call-list">${calls.map(callCardHtml).join('')}</div>`
       : '<div class="empty"><div class="empty-icon" aria-hidden="true">☎</div><strong>Todo tranquilo</strong><div>No hay llamadas pendientes.</div></div>'}
   </section>`;
+  document.getElementById('callClaudeBtn').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Abriendo sesión de Claude…';
+    const result = await window.agentCall.startStream({}).catch(err => ({ ok: false, error: err.message }));
+    if (!result?.ok && !result?.cancelled) showBanner(result?.error || 'No se pudo llamar a Claude.');
+    const again = document.getElementById('callClaudeBtn');
+    if (again) { again.disabled = false; again.textContent = 'Llamar a Claude'; }
+  };
   main.querySelectorAll('[data-call-id]').forEach(card => {
     const callBack = async () => {
       const call = state.calls.find(c => c.id === card.dataset.callId);
