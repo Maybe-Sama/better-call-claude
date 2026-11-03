@@ -643,3 +643,14 @@ test('words said after a result nobody heard resolve its Stop, telling Claude it
   assert.match(answered.hookSpecificOutput.additionalContext, /Todavía no ha oído tu último resultado/);
   assert.match(answered.hookSpecificOutput.additionalContext, /sube los cambios/);
 });
+
+test('a reply said before hearing the result tells Claude not to take it as the answer (round 7 #1)', () => {
+  const broker = new CallBroker({ defaultMode: 'off', minResultMs: 0 });
+  broker.notePrompt({ session_id: 'b7', cwd: 'C:/w', prompt: 'Despliega la rama de pruebas, por favor.' });
+  let answered = null;
+  const call = broker.receiveCompletion({ session_id: 'b7', cwd: 'C:/w', last_assistant_message: 'Ha fallado. ¿Hago rollback?' }, { responder: r => { answered = r; return true; }, hint: 'on' });
+  broker.answer(call.id);
+  broker.submitUserText(call.id, 'No, para, eso no lo quiero.', { beforeResult: true });
+  assert.match(answered.hookSpecificOutput.additionalContext, /Antes de oír tu resultado/);
+  assert.match(answered.hookSpecificOutput.additionalContext, /no .*tomes estas palabras como su respuesta/);
+});

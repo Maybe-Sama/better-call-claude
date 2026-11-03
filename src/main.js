@@ -653,7 +653,7 @@ const metrics = new VoiceMetrics({
   sink: /^(1|true)$/i.test(process.env.AGENTCALL_VOICE_METRICS || '') ? jsonlSink(path.join(AGENTCALL_DATA, 'voice-metrics.jsonl')) : null,
 });
 
-function routeUserText({ callId, sessionId, text, urgency, source, early, unheard }) {
+function routeUserText({ callId, sessionId, text, urgency, source, early, unheard, beforeResult }) {
   const call = broker.calls.get(callId);
   // Words begun before a question reached the user (early) are never its answer. To a result nobody heard
   // they are still the user's reply, with Claude told the result was not heard.
@@ -671,7 +671,7 @@ function routeUserText({ callId, sessionId, text, urgency, source, early, unhear
     log(`Voz → cola de la sesión (${String(text).length} caracteres, ${source})`);
     return { ...broker.queueSessionSpeech(sessionId, text, urgency || classifyUrgency(text)), route: 'steer' };
   }
-  const result = answering ? broker.submitUserText(callId, text, { unheard: Boolean(unheard) }) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
+  const result = answering ? broker.submitUserText(callId, text, { unheard: Boolean(unheard), beforeResult: Boolean(beforeResult) }) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
   log(`Voz → ${answering ? 'respuesta' : `cola ${result.urgency || ''}`} (${String(text).length} caracteres, ${source})`);
   return { ...result, route: answering ? 'answer' : 'steer' };
 }

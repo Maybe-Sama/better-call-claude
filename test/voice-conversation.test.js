@@ -1692,3 +1692,118 @@ test('a permission withdrawn after it was handed back is not asked again (round 
   h.conv.setCall(workingCall({ interactionKind: null, messages: [{ ...assistant('¿Lo permites?', 9), kind: 'permission', rev: 1 }] }));
   assert.equal(h.events('speak').length, 1, 'said once, when it was current');
 });
+
+// ── Regression review, round 7 (2026-11-03) ───────────────────────────────────
+
+test('words begun before a result was heard are not its answer: Claude is told so, the result is said (round 7 #1)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ messages: [assistant('Ha fallado el despliegue. ¿Hago rollback?', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'No, para, eso no lo quiero.', confidence: 0.9 });
+  h.advance(4000);
+  const [commit] = h.events('commit');
+  assert.equal(commit.early, true);
+  assert.equal(commit.beforeResult, true);
+  assert.equal(commit.unheard, false);
+  assert.equal(h.events('speak').at(-1)?.text, 'Ha fallado el despliegue. ¿Hago rollback?');
+});
+
+test('hanging up while a result was kept: Claude is told the user never heard it (round 7 #1)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ messages: [assistant('Listo: la migración ha fallado.', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Y luego sube los cambios.', confidence: 0.9 });
+  h.conv.leave();
+  h.conv.flushDraft('cuelgas');
+  const [commit] = h.events('commit');
+  assert.equal(commit.unheard, true);
+  assert.equal(commit.beforeResult, false);
+});
+
+test('a late "no, espera" for words said before a permission started does not cut it (round 7 #2)', () => {
+  const h = harness();
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('Claude pide permiso para usar Bash. ¿Lo permites?', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.advance(3500); // the transcript is slow: the question starts
+  const q = h.events('speak').at(-1);
+  assert.equal(q.text, 'Claude pide permiso para usar Bash. ¿Lo permites?');
+  h.conv.tts({ type: 'chunk', id: q.id, seq: 0, text: 'Claude pide permiso para usar Bash.' });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'No, espera, antes haz copia.', confidence: 0.9 });
+  h.advance(6000);
+  assert.ok(!h.events('tts').some(t => t.action === 'stop' && t.id === q.id), 'the question is not cut');
+  h.conv.tts({ type: 'end', id: q.id });
+  h.advance(1000);
+  const [commit] = h.events('commit');
+  assert.equal(commit.early, true, 'and the words are not its answer');
+});
+
+test('a question answered with a button stops being read (round 7 #3)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('Claude pide permiso. ¿Lo permites?', 9)] }));
+  const q = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id: q.id, seq: 0, text: 'Claude pide permiso.' });
+  h.conv.setCall(workingCall({ interactionKind: 'permission', messages: [assistant('Claude pide permiso. ¿Lo permites?', 9)] })); // "Sí"
+  assert.ok(h.events('tts').some(t => t.action === 'stop' && t.id === q.id));
+  h.conv.committed({ ok: true, route: 'answer', text: '' });
+  assert.deepEqual(h.events('ack').map(a => a.phrase), ['vale']);
+});
+
+test('a permission cut by a noise and then answered by button is not said again (round 7 #4)', () => {
+  const h = harness();
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('Claude pide permiso. ¿Lo permites?', 9)] }));
+  const q = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id: q.id, seq: 0, text: 'Claude pide permiso.' });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 3, onset_ms: 90 });
+  h.advance(SUSTAINED_MS + 20);
+  h.conv.tts({ type: 'end', id: q.id, interrupted: true });
+  h.conv.setCall(workingCall({ interactionKind: 'permission', messages: [assistant('Claude pide permiso. ¿Lo permites?', 9)] })); // button
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 3, silence_ms: 700 });
+  h.conv.stt({ type: 'rejected', utterance: 3 });
+  h.advance(2000);
+  assert.equal(h.events('speak').length, 1);
+});
+
+test('Enviar with only the spoken draft is judged like voice (round 7 #5)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ messages: [assistant('Listo: la migración ha fallado.', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Y luego sube los cambios.', confidence: 0.9 });
+  h.conv.submitTyped('');
+  const [commit] = h.events('commit');
+  assert.equal(commit.early, true);
+  assert.equal(h.events('speak').at(-1)?.text, 'Listo: la migración ha fallado.', 'the result is still said');
+});
+
+test('without echo cancellation, a short echo of Claude going on is not taken as the user (round 7 #6)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Primero miro la carpeta.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Primero miro la carpeta.' });
+  h.conv.tts({ type: 'idle', id });
+  h.advance(5000);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 4, onset_ms: 90 });
+  h.advance(300);
+  h.conv.streamSentence('Y no, no es eso.');
+  h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Y no, no es eso.' });
+  h.advance(900);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 4, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 4, text: 'Y no, no es eso.', confidence: 0.9 });
+  h.conv.tts({ type: 'end', id });
+  h.advance(5000);
+  assert.equal(h.events('commit').length, 0);
+  assert.ok(!h.events('tts').some(t => t.action === 'stop'));
+});

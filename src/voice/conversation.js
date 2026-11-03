@@ -165,6 +165,7 @@ class VoiceConversation extends EventEmitter {
       this.promptKey = key;
       this.askedAt = key && !this.leaving ? this.now() : null;
     }
+    if (this._answered(this.playing)) this._stopTts(); // answered meanwhile: not read on
     // A question kept to be said later was answered meanwhile (a button, the terminal): it is not said.
     if (this.pendingSpeak && this.pendingFor && this.pendingFor !== this.promptKey) { this.pendingSpeak = null; this.pendingFor = null; }
     if (call) this._maybeSpeak(call);
@@ -245,6 +246,7 @@ class VoiceConversation extends EventEmitter {
     let doneSaid = '';
     let curSaid = '';
     if (src && asking && src.forPrompt === this.promptKey) question = true;
+    else if (this._answered(src)) { /* answered meanwhile: nothing to hand back */ }
     else if (src) {
       const from = this._remainderAt(src);
       // Where the message Claude is writing now starts in what was being said: before it, finished ones.
@@ -425,10 +427,11 @@ class VoiceConversation extends EventEmitter {
   submitTyped(text) {
     const clean = String(text || '').trim();
     // A spoken draft nobody adopted still belongs to this turn: it goes first, never dropped.
-    const value = [this._draftText(), clean].filter(Boolean).join(' ').trim();
+    const spoken = this._draftText();
+    const value = [spoken, clean].filter(Boolean).join(' ').trim();
     this.typing = false;
     if (!value) return { ok: false, error: 'No hay nada que enviar.' };
-    return this._commit(value, 'typed');
+    return this._commit(value, 'typed', { spoken: Boolean(spoken) });
   }
 
   // ── Speech recognition ──────────────────────────────────────────────────
@@ -522,7 +525,8 @@ class VoiceConversation extends EventEmitter {
     // an interruption of it: its words wait in the draft until Claude has finished.
     // (A stream that went quiet and spoke again started again then.)
     const before = endedAt != null && this.playing && endedAt < Math.max(this.playing.startedAt, this.playing.resumedAt || 0);
-    if (this.speaking() && (!before || (classifyUrgency(text) === 'interrupt' && !this.playing.forPrompt))) this._bargeIn('final');
+    const held = Boolean(this.playing?.forKey) && this.playing.forKey === this.promptKey; // the question or result in the call
+    if (this.speaking() && (!before || (classifyUrgency(text) === 'interrupt' && !held))) this._bargeIn('final');
     if (this.typing) {
       this.emit('append', { text });
       policy.final(this.now(), '', 0); // the transcript arrived (it went to the box), the turn need not wait for it
@@ -545,6 +549,13 @@ class VoiceConversation extends EventEmitter {
     if (this._noiseCutBy(utterance)) this._resumeAfterNoise();
     if (this.duckedFor !== undefined && (this.duckedFor == null || utterance == null || this.duckedFor === utterance)) this._releaseDuck('no eran palabras: Claude sigue');
     this._afterUser();
+  }
+
+  // The question or result this utterance was saying is no longer held: answered (a button, typing, the
+  // terminal) or withdrawn — nothing is held now, or another question is. (A newer result arriving is not
+  // an answer: what was being said finishes first.)
+  _answered(utt) {
+    return Boolean(utt?.forKey) && utt.forKey !== this.promptKey && (!this.promptKey || this._asking());
   }
 
   // A question or permission is held in the call (a result is not a question).
@@ -587,14 +598,14 @@ class VoiceConversation extends EventEmitter {
     // Claude is still saying something (the sentence before a question, an earlier message): this comes
     // after it, not over it.
     if (this._busyVoice()) { this._holdSpeak(text); return; }
-    this._speak(text, this._asking() ? this.promptKey : null);
+    this._speak(text, this._asking() ? this.promptKey : null, this.promptKey);
   }
 
-  _speak(text, forPrompt = null) {
+  _speak(text, forPrompt = null, forKey = forPrompt) {
     if (this.leaving) return;
     if (this.playing) this._stopTts();
     this.counter += 1;
-    this.playing = { id: `v${this.counter}`, text, chunks: new Map(), current: null, startedAt: this.now(), ack: false, unfiltered: !this.echoCancelled, forPrompt };
+    this.playing = { id: `v${this.counter}`, text, chunks: new Map(), current: null, startedAt: this.now(), ack: false, unfiltered: !this.echoCancelled, forPrompt, forKey };
     this.interrupted = null;
     this.emit('speak', { id: this.playing.id, text });
   }
@@ -689,7 +700,7 @@ class VoiceConversation extends EventEmitter {
     this.pendingSpeak = null;
     this.pendingFor = null;
     if (!text) return;
-    this._speak(text, question && this._asking() ? this.promptKey : null);
+    this._speak(text, question && this._asking() ? this.promptKey : null, question ? this.promptKey : null);
     if (question && this.playing) this.askedAt = this.now(); // from now on the user is answering it
   }
 
@@ -765,7 +776,8 @@ class VoiceConversation extends EventEmitter {
     this.interrupted = null;
     if (!rest) return;
     if (this.leaving) { // the user is hanging up: it is said when they pick the call up again
-      if (this.call) this.emit('unheard', { callId: this.call.id, text: rest, done: '' });
+      const stale = this._answered(cut.interrupted);
+      if (this.call && !stale) this.emit('unheard', { callId: this.call.id, text: rest, done: '' });
       return;
     }
     this.emit('failure', 'false_speech_start');
@@ -825,7 +837,10 @@ class VoiceConversation extends EventEmitter {
     // ("¿Supabase o Neon?" → "Neon"). Only voice that started during playback can be its echo.
     if (!audible && startedAt != null && startedAt > quiet.at + 150) return false;
     const heard = contentWords(text);
-    if (span && heard.length < 3) return false; // "No, para." begun while Claude was quiet
+    if (span && heard.length < 3) { // short: Claude's echo only if it is literally what Claude said since ("No, para." is not)
+      const f = fold(text);
+      return f.split(' ').length >= 2 && fold(said).includes(f);
+    }
     if (!heard.length) return Boolean(audible);
     const spoken = new Set(contentWords(said));
     const ratio = heard.filter(w => spoken.has(w)).length / heard.length;
@@ -885,6 +900,8 @@ class VoiceConversation extends EventEmitter {
   // src: the utterance it comes from (what it was, which message of the stream).
   _resume(text, src = null) {
     this.streamCut = false;
+    // A question or result already answered (a button, the terminal) is not said again.
+    if (this._answered(src)) return;
     const forPrompt = src?.forPrompt && src.forPrompt === this.promptKey ? this.promptKey : null;
     const at = src?.chunks ? this._remainderAt(src) : 0;
     const msg = (src?.msgStarts || []).filter(m => m.at <= at).at(-1)?.msg ?? -1;
@@ -893,7 +910,7 @@ class VoiceConversation extends EventEmitter {
     if (src?.streaming && this.streamOpen) {
       if (this.playing && this.playing.id !== this.streamId) this._stopTts();
       this.streamSentence(text, msg);
-    } else this._speak(text, forPrompt);
+    } else this._speak(text, forPrompt, src?.forKey || null);
   }
 
   // ── End of turn ─────────────────────────────────────────────────────────
@@ -921,8 +938,11 @@ class VoiceConversation extends EventEmitter {
 
   _onDeadline() {
     if (this.speaking() && !this.playing.ack) {
-      // Never answer while Claude is still talking, unless the user is stopping it ("no, para…").
-      if (classifyUrgency(this._draftText()) !== 'interrupt') { this.deferredCommit = true; this._debug('fin de turno aplazado: Claude habla'); return; }
+      // Never answer while Claude is still talking, unless the user is stopping it ("no, para…") — not
+      // with words begun before the question or result being said started (they wait for its end).
+      const p = this.playing;
+      const saidBefore = Boolean(p.forKey) && p.forKey === this.promptKey && this.draftStartAt != null && this.draftStartAt < Math.max(p.startedAt, p.resumedAt || 0);
+      if (saidBefore || classifyUrgency(this._draftText()) !== 'interrupt') { this.deferredCommit = true; this._debug('fin de turno aplazado: Claude habla'); return; }
       this._bargeIn('final');
     }
     const spoken = this.policy ? this.policy.take() : '';
@@ -961,15 +981,18 @@ class VoiceConversation extends EventEmitter {
     this.holdTimer = null;
   }
 
-  _commit(text, source, { early: unheard = false } = {}) {
+  _commit(text, source, { early: unheard = false, spoken = false } = {}) {
     this.noiseCut = null; // a new turn: an old noise must not bring back what Claude was saying
     this.lastCut = null;  // the words that cut Claude were sent: the cut stands
     // Words begun before a question or permission reached the user were not said to it: they go to Claude
     // as something to take into account, and the question is still waiting for its answer.
     // (For a result, the reply still goes to Claude, which is told the user had not heard it.)
-    const early = unheard || (source === 'voice' && this.turn === 'awaitingUser' && !this._heardPrompt());
-    // A result the user is still to hear (kept while they talked) is said after their reply.
-    if (early && !unheard && this.kind === 'stop' && this.pendingSpeak) this.pendingFor = null;
+    const early = unheard || ((source === 'voice' || spoken) && this.turn === 'awaitingUser' && !this._heardPrompt());
+    // A reply to a result begun before the user heard it: if the result is about to be said (kept while
+    // they talked), Claude is told that; otherwise (hanging up) that the user never heard it.
+    const beforeResult = early && !unheard && !this.leaving && this.kind === 'stop' && Boolean(this.pendingSpeak);
+    if (beforeResult) this.pendingFor = null; // said after their reply
+    const resultUnheard = this.kind === 'stop' && early && !beforeResult;
     const route = this.turn === 'awaitingUser' && !early ? 'answer' : 'steer';
     const commit = {
       callId: this.call?.id || null,
@@ -977,7 +1000,8 @@ class VoiceConversation extends EventEmitter {
       text,
       route,
       early,
-      unheard, // the result came while the user was leaving: Claude is told it was not heard
+      unheard: resultUnheard, // the result was not heard (and will not be now): Claude is told
+      beforeResult,           // the user is hearing the result right after this reply
       urgency: route === 'steer' ? classifyUrgency(text) : null,
       kind: this.kind,
       source,
