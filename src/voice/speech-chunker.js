@@ -36,19 +36,40 @@ function balanced(text) {
   return count(/`/g) % 2 === 0 && count(/\*\*/g) % 2 === 0 && count(/\[/g) <= count(/\]/g) && !/\]\([^)]*$/.test(text);
 }
 
-function sentenceEnd(text) {
+// A dot after these never ends a sentence ("Sr. García", "EE. UU.", "pág. 4"); after these only when the
+// next word starts with a capital ("etc. Luego…" ends, "p. ej. un caso" does not). A lowercase letter
+// ("p.", "a. m.") is of the first kind, a capital one ("el plan B. Luego…") of the second.
+const ABBREV_ALWAYS = new Set(['sr', 'sra', 'srta', 'sres', 'dr', 'dra', 'd', 'dña', 'ud', 'uds', 'vd', 'vds', 'ee', 'uu', 'pág', 'pag', 'págs', 'núm', 'num', 'nº', 'art', 'fig', 'cap', 'av', 'avda', 'tel', 'vs', 'aprox', 'mr', 'mrs', 'ms', 'st']);
+const ABBREV_MAYBE = new Set(['etc', 'ej', 'máx', 'max', 'mín', 'min', 'pp', 'ss']);
+
+function isAbbreviation(text, m) {
+  if (!m[0].startsWith('.') || m[0].startsWith('..')) return false;
+  const word = /([\p{L}º]+)$/u.exec(text.slice(0, m.index))?.[1];
+  if (!word) return false;
+  const lower = word.toLowerCase();
+  if ((word.length === 1 && word === lower) || ABBREV_ALWAYS.has(lower)) return true;
+  if (word.length > 1 && !ABBREV_MAYBE.has(lower)) return false;
+  const next = /\S/.exec(text.slice(m.index + m[0].length));
+  return !next || next[0] === next[0].toLowerCase(); // not arrived yet: wait for it
+}
+
+// strict: no inline code, bold or link left open. A stray ` or ** would make the whole paragraph one
+// endless sentence, so a long text without a balanced end is cut without that rule.
+function sentenceEnd(text, strict = true) {
   for (const m of text.matchAll(SENTENCE_END)) {
     const end = m.index + m[0].length;
-    if (balanced(text.slice(0, end))) return end;
+    if (isAbbreviation(text, m)) continue;
+    if (!strict || balanced(text.slice(0, end))) return end;
   }
   return -1;
 }
 
 // Where to cut a sentence longer than MAX_SENTENCE: after the last comma that fits (else the last space).
-function longCut(text) {
+function longCut(text, strict = true) {
   const head = text.slice(0, MAX_SENTENCE);
-  for (let i = head.lastIndexOf(', '); i > 40; i = head.lastIndexOf(', ', i - 1)) if (balanced(text.slice(0, i + 1))) return i + 1;
-  for (let i = head.lastIndexOf(' '); i > 40; i = head.lastIndexOf(' ', i - 1)) if (balanced(text.slice(0, i))) return i;
+  const ok = t => !strict || balanced(t);
+  for (let i = head.lastIndexOf(', '); i > 40; i = head.lastIndexOf(', ', i - 1)) if (ok(text.slice(0, i + 1))) return i + 1;
+  for (let i = head.lastIndexOf(' '); i > 40; i = head.lastIndexOf(' ', i - 1)) if (ok(text.slice(0, i))) return i;
   return -1;
 }
 
@@ -290,8 +311,12 @@ class SpeechChunker {
       while (pos < text.length && /\s/.test(text[pos])) pos += 1;
       const rest = text.slice(pos);
       if (!rest) break;
-      const end = sentenceEnd(rest);
-      const cut = (end < 0 ? rest.length : end) > MAX_SENTENCE ? longCut(rest) : -1;
+      let end = sentenceEnd(rest);
+      // Far past any sentence length with nothing balanced: an unpaired ` or ** (cut without that rule).
+      const stray = end < 0 && rest.length > 2 * MAX_SENTENCE;
+      if (stray) end = sentenceEnd(rest, false);
+      let cut = (end < 0 ? rest.length : end) > MAX_SENTENCE ? longCut(rest) : -1;
+      if (cut < 0 && stray) cut = (end < 0 ? rest.length : end) > MAX_SENTENCE ? longCut(rest, false) : -1;
       const n = cut > 0 ? cut : end > 0 ? end : final ? rest.length : 0;
       if (!n) break;
       if (!this._emit(rest.slice(0, n))) break;

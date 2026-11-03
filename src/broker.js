@@ -141,7 +141,7 @@ class CallBroker extends EventEmitter {
     this.sessionModes = new Map();
     // Sessions AgentCall drives itself (controlled calls): their own plugin hooks never make calls,
     // whatever /saul says for that session; only the controller's prompts (hint 'on') do.
-    this.driven = new Set();
+    this.driven = new Map(); // sessionId → how many AgentCall processes drive it (one closing, one resumed)
   }
 
   setDnd(value) {
@@ -212,6 +212,7 @@ class CallBroker extends EventEmitter {
     }
     session.lastPromptAt = this.now();
     session.interacted = false;
+    session.quietStop = false; // a real task: its result calls (a /saul reply that never stopped cleanly must not hide it)
     this._releaseSession(payload.session_id, null, 'Has seguido en la terminal; esta petición ya no está pendiente.');
     this._dropHeld(payload.session_id); // the user chose the terminal: the held call is over
     // Anything said in a call and not delivered yet travels with this prompt.
@@ -639,8 +640,12 @@ class CallBroker extends EventEmitter {
   // Idle Claude = waiting for a free reply ('stop'); busy Claude = working. Its permission and
   // question prompts arrive through receivePermission/receiveAskUser and merge into it as usual.
 
-  driveSession(sessionId) { if (sessionId) this.driven.add(sessionId); }
-  releaseSession(sessionId) { this.driven.delete(sessionId); }
+  driveSession(sessionId) { if (sessionId) this.driven.set(sessionId, (this.driven.get(sessionId) || 0) + 1); }
+  releaseSession(sessionId) {
+    const n = (this.driven.get(sessionId) || 0) - 1;
+    if (n > 0) this.driven.set(sessionId, n);
+    else this.driven.delete(sessionId);
+  }
 
   openStreamCall({ sessionId, cwd, title } = {}) {
     this._session({ session_id: sessionId, cwd });
@@ -675,6 +680,11 @@ class CallBroker extends EventEmitter {
     const call = this.calls.get(callId);
     if (!call?.stream) return;
     call.claudeBusy = Boolean(busy);
+    // Hung up while Claude was idle, and Claude works again on its own: it calls back when done.
+    if (busy && call.status === 'ended') {
+      this._clearEndTimer(call.id);
+      call.status = 'parked';
+    }
     if (!call.responder || call.resolved) {
       call.interactionKind = busy ? null : 'stop';
       call.awaitingClaude = Boolean(busy);
@@ -727,6 +737,15 @@ class CallBroker extends EventEmitter {
   ringStreamCall(callId) {
     const call = this.calls.get(callId);
     if (!call?.stream || !['parked', 'pending', 'onhold'].includes(call.status)) return false;
+    call.updatedAt = this.now();
+    this._enqueueOrRing(call);
+    return true;
+  }
+
+  // Claude finished (or asked something) while the user was leaving the call: it rings back.
+  ringBack(callId) {
+    const call = this.calls.get(callId);
+    if (!call || this.activeId === callId || !['onhold', 'parked', 'pending'].includes(call.status)) return false;
     call.updatedAt = this.now();
     this._enqueueOrRing(call);
     return true;
@@ -873,8 +892,10 @@ class CallBroker extends EventEmitter {
     if (call.responder && !call.resolved) this._respond(call, NO_DECISION);
     call.resolved = true;
     if (this.activeId === call.id) {
-      call.interactionKind = null;
-      call.awaitingClaude = false;
+      // A controlled call is Claude's whole conversation: withdrawing a prompt does not make Claude idle.
+      call.interactionKind = call.stream && !call.claudeBusy ? 'stop' : null;
+      call.awaitingClaude = Boolean(call.stream && call.claudeBusy);
+      if (call.stream && note) note = 'Claude ya no necesita esa respuesta.';
       if (note) call.messages.push({ role: 'system', text: note, at: this.now(), kind: 'note' });
       call.updatedAt = this.now();
       this._changed('message', { id: call.id });
@@ -944,6 +965,7 @@ class CallBroker extends EventEmitter {
   }
 
   _startRinging(call) {
+    call.lineAt = call.status === 'queued' ? (call.queuedAt ?? this.now()) : this.now(); // its place in the line
     call.status = 'ringing';
     call.updatedAt = this.now();
     this._clearRingTimer(call.id);
@@ -969,7 +991,9 @@ class CallBroker extends EventEmitter {
 
   _moveToQueued(call) {
     this._clearRingTimer(call.id);
-    if (call.status !== 'queued') call.queuedAt = this.now();
+    // A ringing call pushed back keeps its place: it was there before the calls queued behind it.
+    if (call.status === 'ringing') call.queuedAt = call.lineAt ?? this.now();
+    else if (call.status !== 'queued') call.queuedAt = this.now();
     call.status = 'queued';
     call.updatedAt = this.now();
     this._changed('queued', { id: call.id });

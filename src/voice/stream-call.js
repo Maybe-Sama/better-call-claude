@@ -8,6 +8,9 @@ const { EventEmitter } = require('node:events');
 const { toSpeech } = require('../speech-text');
 
 const GREETING = 'Dime.';
+// What is heard of a message that is all list, table or code (the voice never reads those).
+const ON_SCREEN = 'Te lo he dejado escrito en pantalla.';
+const speechOf = text => toSpeech(text) || ON_SCREEN;
 
 // AgentCall's own hooks are off inside the session it drives, so CALL_RULES never reach it: these do.
 // Everything Claude writes is spoken while it is written, so the text itself has to be speech.
@@ -46,10 +49,14 @@ class StreamCallController extends EventEmitter {
     this.log = log;
     this.defer = defer;
     this.calls = new Map(); // callId → entry (see start())
+    this.closing = new Set(); // entries whose session is closing (hung up, Terminar): AgentCall waits for them on quit
     broker.on('change', () => { this._reap(); this._sync(); });
   }
 
   owns(callId) { return this.calls.has(callId); }
+
+  // Some Claude session is open or still closing.
+  busy() { return this.calls.size > 0 || this.closing.size > 0; }
 
   // Someone is on the line: Claude's text is spoken as it streams. Otherwise (hung up, on hold,
   // ringing back, in Pendientes) it is kept, and caught up on when the user is back.
@@ -59,6 +66,14 @@ class StreamCallController extends EventEmitter {
   }
 
   async start({ cwd, resume = null }) {
+    // That conversation is already open in a call (hung up, on hold): back to it. A second process on
+    // the same conversation would split it in two.
+    for (const [callId, e] of this.calls) {
+      if (resume && !e.ended && e.session.sessionId === resume) {
+        this.broker.answer(callId);
+        return this.broker.calls.get(callId);
+      }
+    }
     const session = this.createSession({ cwd, resume, appendSystemPrompt: VOICE_CALL_RULES });
     // Its own plugin hooks must never ring (whatever /saul stored for a resumed session).
     this.broker.driveSession(session.sessionId);
@@ -81,7 +96,12 @@ class StreamCallController extends EventEmitter {
       offline: [],          // sentences of the current message written while nobody listened
       msgMissed: false,     // part of the current message was not heard
       missed: [],           // speech of this turn's messages nobody heard
+      cutRest: '',          // what the user left unheard of the message being written (said on picking up)
       turnMsgs: [],         // call messages of this turn
+      msgSpoke: 0,          // sentences the current message gave to the voice
+      lastMsgSpoke: 0,      // … and the last finished one
+      promptCall: null,     // broker call holding the prompt asked (it may not be this call)
+      promptedMsg: false,   // what was missed of the current message went in front of a question
     };
     this.calls.set(call.id, entry);
     this._bind(call.id, entry);
@@ -125,49 +145,61 @@ class StreamCallController extends EventEmitter {
     session.on('turn-start', () => {
       this.broker.setStreamBusy(callId, true);
       entry.chunker = this.createChunker();
-      Object.assign(entry, { turnOpen: true, offline: [], msgMissed: false, missed: [], turnMsgs: [] });
+      Object.assign(entry, { turnOpen: true, offline: [], msgMissed: false, missed: [], cutRest: '', turnMsgs: [], msgSpoke: 0, lastMsgSpoke: 0, promptedMsg: false });
       if (this._onLine(callId)) this._catchUp(callId, entry);
     });
-    // Each assistant message (before and after every tool) is its own text: what was left of the
-    // previous one is said first, so the answer after a tool is not glued to it or lost.
+    // Each assistant message (before and after every tool) is its own text, heard whole: the end of one
+    // is said when it is complete, so the answer after a tool is not glued to it or lost.
     session.on('assistant-start', () => {
+      if (entry.chunker) this._finishMessage(callId, entry);
       entry.inMessage = true;
-      if (!entry.chunker) return;
-      const rest = entry.chunker.finish();
-      if (rest) this._say(callId, entry, [rest]);
+      entry.msgSpoke = 0;
+      entry.promptedMsg = false;
       entry.chunker = this.createChunker();
+      if (this._onLine(callId) && entry.voiceTurn) this.voice.streamMessageStart();
     });
     session.on('text', ({ delta }) => {
       if (!entry.chunker) return;
-      this._say(callId, entry, entry.chunker.push(delta));
+      this._say(callId, entry, entry.chunker.push(delta), true);
     });
     session.on('assistant-message', ({ text, aborted }) => {
+      if (!aborted) this._finishMessage(callId, entry);
       entry.inMessage = false;
+      const prompted = entry.promptedMsg;
+      entry.promptedMsg = false;
       if (!text || aborted) return;
+      entry.lastMsgSpoke = entry.msgSpoke; // (a message with only a tool call says nothing and is not the answer)
       // Kept in the call, not read again: it was spoken while streamed, or it is caught up on later.
       const msg = this.broker.addCallMessage(callId, { role: 'assistant', text, speech: '', silent: true, kind: 'stream' });
       if (msg) entry.turnMsgs.push(msg);
-      if (entry.msgMissed || !this._onLine(callId)) entry.missed.push(toSpeech(text));
+      // What was missed of it already went in front of a question: not said a second time.
+      if (!prompted && (entry.msgMissed || !this._onLine(callId))) entry.missed.push(speechOf(text));
       entry.offline = [];
       entry.msgMissed = false;
+      entry.cutRest = ''; // the whole message is in `missed` now
     });
-    session.on('turn-end', ({ aborted } = {}) => {
-      const rest = !aborted && entry.chunker ? entry.chunker.finish() : '';
-      if (rest) this._say(callId, entry, [rest]);
-      if (entry.voiceTurn && this._onLine(callId)) this.voice.streamTurnEnd();
-      entry.voiceTurn = false;
+    session.on('turn-end', ({ aborted, isError, result } = {}) => {
+      if (!aborted && entry.chunker) this._finishMessage(callId, entry); // a message that never reported its end
+      const last = entry.turnMsgs.at(-1);
+      // An answer that was all list, table or code is never silent.
+      if (!aborted && last && !entry.lastMsgSpoke) this._say(callId, entry, [speechOf(last.text)]);
       entry.chunker = null;
       entry.turnOpen = false;
       entry.inMessage = false;
+      if (isError && !aborted) this._turnFailed(callId, entry, result);
+      // A message the user sent meanwhile starts the next turn at once: Claude's voice goes on in the same
+      // utterance instead of the next turn cutting what is still being heard.
+      const more = Boolean(entry.session.busy) && !entry.ended;
+      if (!more) this._endVoiceTurn(callId, entry);
       // Nobody heard how it ended: the last message is what the user hears on picking up.
-      const last = entry.turnMsgs.at(-1);
-      if (!this._onLine(callId) && last && (entry.missed.length || entry.msgMissed || entry.offline.length)) {
-        last.silent = false;
-        last.speech = toSpeech(last.text);
-        last.rev = (last.rev || 0) + 1;
+      const end = entry.turnMsgs.at(-1);
+      if (!this._onLine(callId) && end && (entry.missed.length || entry.msgMissed || entry.offline.length || entry.cutRest || end.kind === 'error')) {
+        end.silent = false;
+        if (end.kind !== 'error') end.speech = speechOf(end.text);
+        end.rev = (end.rev || 0) + 1;
         this.broker.messagesChanged(callId);
       }
-      Object.assign(entry, { offline: [], msgMissed: false, missed: [], turnMsgs: [] });
+      Object.assign(entry, { offline: [], msgMissed: false, missed: [], cutRest: '', turnMsgs: [] });
       this._idleCheck(callId, entry);
     });
     session.on('message', ({ uuid, state }) => {
@@ -186,7 +218,8 @@ class StreamCallController extends EventEmitter {
       if (!requestId) return;
       if (entry.prompt === requestId) {
         entry.prompt = null;
-        this.broker.cancel(callId);
+        this.broker.cancel(entry.promptCall || callId);
+        entry.promptCall = null;
         this._nextPrompt(callId, entry);
       } else {
         entry.prompts = entry.prompts.filter(q => q.requestId !== requestId);
@@ -194,11 +227,13 @@ class StreamCallController extends EventEmitter {
     });
     session.on('exit', () => {
       if (entry.ended) return;
+      this._endVoiceTurn(callId, entry);
       entry.ended = true;
       entry.prompts = [];
       this.broker.setStreamBusy(callId, false);
       this.broker.streamEnded(callId);
-      this.broker.addCallMessage(callId, { role: 'system', text: 'La sesión de Claude se ha cerrado. Cuelga cuando quieras.', kind: 'note' });
+      // Said, not only shown: the user may be on the line waiting for Claude.
+      this.broker.addCallMessage(callId, { role: 'assistant', text: 'Mi sesión se ha cerrado. Cuelga cuando quieras.', kind: 'note' });
       this.broker.ringStreamCall(callId); // hung up while it worked: the user should know
     });
     session.on('error', err => this.log(`Sesión controlada: ${err?.message || err}`));
@@ -217,8 +252,9 @@ class StreamCallController extends EventEmitter {
       return;
     }
     if (entry.turnOpen) {
-      // Still being written: the whole message is caught up on once it ends (no half repeated).
-      if (entry.inMessage) entry.msgMissed = true;
+      // Still being written: the whole message is caught up on once it ends (no half repeated); if the user
+      // is back before that, from where they left it.
+      if (entry.inMessage) { entry.msgMissed = true; entry.cutRest = text; }
       else entry.missed.push(text);
       return;
     }
@@ -229,8 +265,9 @@ class StreamCallController extends EventEmitter {
   }
 
   // Claude's sentences: spoken when someone is on the line, kept for the catch-up otherwise.
-  _say(callId, entry, sentences) {
+  _say(callId, entry, sentences, fromMessage = false) {
     if (!sentences.length) return;
+    if (fromMessage) entry.msgSpoke += sentences.length;
     if (this._onLine(callId)) {
       this._catchUp(callId, entry);
       for (const sentence of sentences) this.voice.streamSentence(sentence);
@@ -251,11 +288,41 @@ class StreamCallController extends EventEmitter {
       this.voice.streamTurnStart();
       entry.voiceTurn = true;
     }
-    const parts = [...entry.missed.slice(-3), ...entry.offline];
-    entry.missed = [];
-    entry.offline = [];
+    const parts = this._missedParts(entry);
     entry.msgMissed = false;
     for (const part of parts) this.voice.streamSentence(part);
+  }
+
+  // What the user did not hear of this turn, in order (taken: it is about to be said).
+  _missedParts(entry) {
+    const parts = [...entry.missed.slice(-3), ...(entry.cutRest ? [entry.cutRest] : []), ...entry.offline];
+    entry.missed = [];
+    entry.cutRest = '';
+    entry.offline = [];
+    return parts;
+  }
+
+  // The end of a message (its last sentence, or a closing question) once it is complete.
+  _finishMessage(callId, entry) {
+    const rest = entry.chunker?.finish();
+    if (rest) this._say(callId, entry, [rest], true);
+  }
+
+  _endVoiceTurn(callId, entry) {
+    if (entry.voiceTurn && this._onLine(callId)) this.voice.streamTurnEnd();
+    entry.voiceTurn = false;
+  }
+
+  // The turn ended in an error (API overloaded, usage limit, prompt too long): the user hears it.
+  _turnFailed(callId, entry, result) {
+    const detail = String(result || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    this.log(`Turno con error: ${detail || '(sin detalle)'}`);
+    const msg = this.broker.addCallMessage(callId, {
+      role: 'assistant', kind: 'error',
+      text: `Me he detenido por un error${detail ? `: ${detail}` : '.'}`,
+      speech: 'Me he detenido por un error. Repítemelo o prueba en un rato.',
+    });
+    if (msg) entry.turnMsgs.push(msg);
   }
 
   // Picked up again mid-turn (or stepped away): the voice follows. Deferred so the voice has already
@@ -272,12 +339,15 @@ class StreamCallController extends EventEmitter {
   // Claude has nothing left to do: the call says so, and rings if the user is away.
   _idleCheck(callId, entry) {
     if (entry.ended || entry.turnOpen || entry.urgent > 0 || entry.session.busy) return;
+    this._endVoiceTurn(callId, entry); // a queued message that never became a turn
     this.broker.setStreamBusy(callId, false);
     this.broker.ringStreamCall(callId);
   }
 
   // Claude can ask several things at once (parallel tools): one is asked in the call at a time.
   _permission(callId, entry, p) {
+    // The conversation was ended (Terminar) while Claude still ran: nobody will answer.
+    if (entry.ended) { entry.session.deny(p.requestId, 'La llamada ha terminado.'); return; }
     if (entry.prompt) { entry.prompts.push(p); return; }
     entry.prompt = p.requestId;
     const payload = { session_id: entry.session.sessionId, cwd: entry.cwd, tool_name: p.toolName, tool_input: p.input || {} };
@@ -287,6 +357,7 @@ class StreamCallController extends EventEmitter {
       else entry.session.deny(p.requestId, d.message);
       if (entry.prompt === p.requestId) {
         entry.prompt = null;
+        entry.promptCall = null;
         this._nextPrompt(callId, entry);
       }
       return true;
@@ -295,14 +366,15 @@ class StreamCallController extends EventEmitter {
     const handled = p.toolName === 'AskUserQuestion'
       ? this.broker.receiveAskUser(payload, responder, 'on')
       : this.broker.receivePermission(payload, responder, 'on');
+    if (handled) entry.promptCall = handled.id;
     if (handled && !this._onLine(callId)) {
       // Nobody on the line: the question will be the first thing heard, so what Claude said before it
       // (and nobody heard) goes in front of it rather than cutting it later.
-      const parts = [...entry.missed.slice(-3), ...entry.offline];
       const msg = handled.messages?.at(-1);
-      if (parts.length && msg) {
-        msg.speech = `${parts.join(' ')} ${msg.speech || msg.text || ''}`.trim();
-        Object.assign(entry, { missed: [], offline: [], msgMissed: false });
+      if (msg && (entry.missed.length || entry.cutRest || entry.offline.length)) {
+        if (entry.inMessage && (entry.msgMissed || entry.offline.length || entry.cutRest)) entry.promptedMsg = true;
+        msg.speech = `${this._missedParts(entry).join(' ')} ${msg.speech || msg.text || ''}`.trim();
+        entry.msgMissed = false;
       }
     }
     if (!handled) {
@@ -326,28 +398,41 @@ class StreamCallController extends EventEmitter {
 
   _failed(callId, entry, err) {
     this.log(`No se pudo enviar a Claude: ${err?.message || err}`);
-    this.broker.addCallMessage(callId, { role: 'system', text: 'No se ha podido enviar a Claude. Repítelo o escríbelo.', kind: 'note' });
+    this.broker.addCallMessage(callId, { role: 'assistant', text: 'No me ha llegado lo último. Repítelo o escríbelo.', kind: 'note' });
     this._idleCheck(callId, entry);
   }
 
-  // A controlled call that is no longer in the broker (hung up while idle) closes its Claude session.
+  // A controlled call that is no longer in the broker (hung up while idle, Terminar) closes its Claude
+  // session. Its own hooks stay off until the process is gone.
   _reap() {
     for (const [callId, entry] of this.calls) {
       if (this.broker.calls.has(callId)) continue;
       this.calls.delete(callId);
       entry.ended = true;
-      this.broker.releaseSession(entry.session.sessionId);
-      Promise.resolve(entry.session.close()).catch(err => this.log(`Cerrar sesión: ${err?.message || err}`));
+      this._close(entry);
     }
+  }
+
+  _close(entry) {
+    if (entry.closed) return entry.closed;
+    this.closing.add(entry);
+    entry.closed = Promise.resolve()
+      .then(() => entry.session.close())
+      .catch(err => this.log(`Cerrar sesión: ${err?.message || err}`))
+      .finally(() => {
+        this.closing.delete(entry);
+        this.broker.releaseSession(entry.session.sessionId);
+      });
+    return entry.closed;
   }
 
   // AgentCall is quitting. A Claude left running unattended would go on using tools, so what does not
   // close in time is killed.
   async closeAll({ timeoutMs = 5000 } = {}) {
-    const all = [...this.calls.values()];
+    const all = [...this.calls.values(), ...this.closing];
     this.calls.clear();
-    for (const e of all) { e.ended = true; this.broker.releaseSession(e.session.sessionId); }
-    const closed = Promise.all(all.map(e => Promise.resolve(e.session.close()).catch(() => {})));
+    for (const e of all) e.ended = true;
+    const closed = Promise.all(all.map(e => this._close(e)));
     let timer;
     await Promise.race([closed, new Promise(r => { timer = setTimeout(r, timeoutMs); })]);
     clearTimeout(timer);

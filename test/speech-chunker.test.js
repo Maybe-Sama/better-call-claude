@@ -352,3 +352,19 @@ test('differences from toSpeech: list items, a leading heading and code are neve
   assert.equal(whole(code).all, 'Hecho, ya está el cambio aplicado y probado en local. ¿Lo subo?');
   assert.equal(norm(toSpeech(code)), 'Hecho, ya está el cambio aplicado y probado en local. const b = 2; ¿Lo subo?');
 });
+
+// ── Full-day review (2026-11-03) ─────────────────────────────────────────────
+
+test('abbreviations do not end a sentence (review A10)', () => {
+  const c = new SpeechChunker();
+  const out = [...c.push('El Sr. García vive en EE. UU. y p. ej. trabaja allí. Elige el plan B. Hay peras, etc. Luego hablamos. '), c.finish()].filter(Boolean);
+  assert.deepEqual(out, ['El Sr. García vive en EE. UU. y p. ej. trabaja allí.', 'Elige el plan B.', 'Hay peras, etc.', 'Luego hablamos.']);
+});
+
+test('a stray backtick does not turn the paragraph into one endless sentence (review A10)', () => {
+  const c = new SpeechChunker({ max: 5000 });
+  const text = `Usa la orden \`npm para todo. ${'Sigo escribiendo una frase normal. '.repeat(20)}`;
+  const out = [...c.push(text), c.finish()].filter(Boolean);
+  assert.ok(out.length > 5, `cut into sentences (${out.length})`);
+  assert.ok(out.every(s => s.length <= 220));
+});

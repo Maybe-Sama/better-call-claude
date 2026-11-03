@@ -53,7 +53,23 @@ function formatSnooze(min) { if (min === 60) return '1 hora'; if (min === 120) r
 
 // ── Rendering ────────────────────────────────────────────────────────────────
 
+// The element with keyboard focus, as a selector that finds its twin after main is rebuilt.
+function focusKey() {
+  const el = document.activeElement;
+  if (!el || !main.contains(el) || el.id === 'replyInput') return null; // the text box restores itself
+  if (el.dataset.endId) return `[data-end-id="${CSS.escape(el.dataset.endId)}"]`;
+  if (el.dataset.backId) return `[data-back-id="${CSS.escape(el.dataset.backId)}"]`;
+  if (el.dataset.callId) return `[data-call-id="${CSS.escape(el.dataset.callId)}"]`;
+  return el.id ? `#${CSS.escape(el.id)}` : null;
+}
+
 function render() {
+  const focused = focusKey();
+  renderView();
+  if (focused && !main.contains(document.activeElement)) main.querySelector(focused)?.focus();
+}
+
+function renderView() {
   dndBtn.classList.toggle('on', state.dnd);
   dndBtn.textContent = state.dnd ? 'DND ON' : 'DND';
   dndBtn.setAttribute('aria-pressed', String(state.dnd));
@@ -327,9 +343,10 @@ function renderDashboard() {
       const call = state.calls.find(c => c.id === id);
       // Claude is working on it: a second press confirms (no dialog: it would block the window).
       if (call?.stream && call.awaitingClaude && !(armedEnd?.id === id && armedEnd.until > Date.now())) {
-        armedEnd = { id, until: Date.now() + 4000 };
+        const armed = { id, until: Date.now() + 4000 };
+        armedEnd = armed;
         render();
-        setTimeout(() => { if (armedEnd?.id === id) { armedEnd = null; render(); } }, 4100);
+        setTimeout(() => { if (armedEnd === armed) { armedEnd = null; render(); } }, 4100);
         return;
       }
       armedEnd = null;
@@ -525,10 +542,24 @@ function playAudioChunk(data) {
   if (!playback.current) playNextChunk(playback.id);
 }
 
+// Streamed answer: everything sent so far has been heard and Claude is still writing (or using a tool).
+// Said after a short wait, so the gap while the next sentence is being rendered does not count.
+let idleTimer = null;
+function scheduleIdle(id) {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (playback.id === id && playback.stream && !playback.done && !playback.current && !playback.queue.length) progress({ type: 'idle', id });
+  }, 400);
+}
+
 function playNextChunk(id) {
   if (playback.id !== id || playback.current) return;
   const el = playback.queue.shift();
-  if (!el) { maybeFinishPlayback(); return; }
+  if (!el) {
+    maybeFinishPlayback();
+    if (playback.id === id && playback.stream) scheduleIdle(id);
+    return;
+  }
   playback.current = el;
   el.playbackRate = voiceRate;
   el.volume = ducked ? DUCK_VOLUME : 1;
@@ -571,7 +602,7 @@ function startStream(id) {
   ducked = false;
   lastSpokenText = '';
   setTts(true);
-  if (ttsEngine === 'kokoro') playback = emptyPlayback({ id });
+  if (ttsEngine === 'kokoro') playback = emptyPlayback({ id, stream: true });
   else browserStream = { id, pending: 0, ended: false, seq: 0 };
 }
 
@@ -592,6 +623,7 @@ function appendStream(id, text) {
     if (browserStream !== st) return;
     st.pending -= 1;
     if (st.ended && st.pending <= 0) { browserStream = null; speechFinished(id); }
+    else if (st.pending <= 0) progress({ type: 'idle', id });
   };
   utterance.onend = done;
   utterance.onerror = done;
@@ -615,6 +647,7 @@ function playAck(id) {
   currentUtterance = null;
   speechSynthesis.cancel();
   playback = emptyPlayback({ id, ack: true });
+  ducked = false;
   setTts(true);
 }
 function stopSpeech() {

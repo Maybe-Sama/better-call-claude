@@ -45,7 +45,9 @@ function setup() {
   const spoken = [];
   const voice = {
     turnStarts: 0,
+    messageStarts: 0,
     streamTurnStart() { this.turnStarts += 1; },
+    streamMessageStart() { this.messageStarts += 1; },
     streamSentence(s) { spoken.push(s); },
     streamTurnEnd() { spoken.push('<end>'); },
   };
@@ -605,7 +607,7 @@ test('if Claude exits, the call says so instead of going silent', async () => {
   await ctl.start({ cwd: 'C:/work/app' });
   session.emit('exit', { code: 1 });
   const last = broker.getSnapshot().calls[0].messages.at(-1);
-  assert.equal(last.role, 'system');
+  assert.equal(last.role, 'assistant', 'said, not only shown');
   assert.match(last.text, /se ha cerrado/);
   assert.equal(ctl.say(broker.activeId, 'hola', 'queue').ok, false);
 });
@@ -618,4 +620,138 @@ test('a permission Claude withdraws stops being asked in the call', async () => 
   session.emit('permission-cancelled', { requestId: 'p5' });
   const pub = broker.getSnapshot().calls.find(c => c.id === call.id);
   assert.equal(pub.interactionKind === 'permission' && pub.waiting, false);
+});
+
+// ── Full-day review (2026-11-03) ─────────────────────────────────────────────
+
+test('a message queued during a turn continues the same voice utterance (review A3)', async () => {
+  const { ctl, session, spoken } = setup();
+  await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('text', { delta: 'Google funciona. ' });
+  session.emit('assistant-message', { text: 'Google funciona.' });
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false }); // busy: "y también Apple" is queued
+  session.emit('turn-start');
+  session.emit('text', { delta: 'Apple también. ' });
+  session.emit('assistant-message', { text: 'Apple también.' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  assert.deepEqual(spoken, ['Google funciona.', 'Apple también.', '<end>'], 'no end (and no cut) between the turns');
+});
+
+test('picking up mid-message: the sentences the user left unheard come first (review A4)', async () => {
+  const { broker, ctl, session, spoken } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: 'Uno es esto. Dos es aquello. ' });
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'Dos es aquello.');
+  session.emit('text', { delta: 'Tres va después. ' });
+  spoken.length = 0;
+  broker.answer(call.id);
+  await tick();
+  assert.deepEqual(spoken, ['Dos es aquello.', 'Tres va después.']);
+});
+
+test('a turn that ends in an error is said, not silent (review A5)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false, isError: true, result: 'API Error: 529 overloaded' });
+  const last = broker.calls.get(call.id).messages.at(-1);
+  assert.equal(last.role, 'assistant');
+  assert.equal(last.silent, undefined);
+  assert.match(last.text, /error: API Error: 529/);
+  assert.match(last.speech, /error/);
+});
+
+test('an answer that is all list or code is never silent (review A10)', async () => {
+  const { ctl, session, spoken } = setup();
+  await ctl.start({ cwd: 'C:/work/app' });
+  const silent = () => ({ push: () => [], finish: () => '' }); // what SpeechChunker gives for a list
+  ctl.createChunker = silent;
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: '```js\nconst a = 1;\n```' });
+  session.emit('assistant-message', { text: '```js\nconst a = 1;\n```' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  assert.deepEqual(spoken, ['Te lo he dejado escrito en pantalla.', '<end>']);
+});
+
+test('calling a conversation that is already open goes back to it, no second process (review A6)', async () => {
+  const { broker, session } = setup();
+  let created = 0;
+  const ctl2 = new StreamCallController({ broker, voice: { streamTurnStart() {}, streamMessageStart() {}, streamSentence() {}, streamTurnEnd() {} }, createChunker: chunker, createSession: () => { created += 1; return session; } });
+  const call = await ctl2.start({ cwd: 'C:/work/app' });
+  broker.hold(call.id);
+  const again = await ctl2.start({ cwd: 'C:/work/app', resume: session.sessionId });
+  assert.equal(again.id, call.id);
+  assert.equal(created, 1);
+  assert.equal(broker.activeId, call.id);
+});
+
+test('a permission after "Terminar" is denied, never a call nobody can answer (review A7)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  let release;
+  session.close = () => new Promise(r => { release = r; }); // closing takes a while
+  session.busy = true;
+  broker.setStreamBusy(call.id, true);
+  broker.hold(call.id);
+  broker.dismiss(call.id);
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'git push' } });
+  assert.equal(broker.getSnapshot().calls.length, 0, 'no ghost call');
+  assert.deepEqual(session.decisions.map(d => [d.requestId, d.allow]), [['p1', false]]);
+  assert.equal(broker.sessionMode(session.sessionId, ''), 'off', 'its own hooks stay off while it closes');
+  assert.equal(ctl.busy(), true, 'quitting waits for it');
+  await tick();
+  release();
+  await tick();
+  assert.equal(ctl.busy(), false);
+});
+
+test('a withdrawn prompt is cancelled in the call that holds it (review A7)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'ls' } });
+  const holder = broker.calls.get(call.id);
+  assert.equal(holder.interactionKind, 'permission');
+  session.emit('permission-cancelled', { requestId: 'p1' });
+  assert.notEqual(broker.calls.get(call.id).interactionKind, 'permission');
+  assert.deepEqual(session.decisions, [], 'a request Claude withdrew is not answered');
+});
+
+test('a call hung up while idle calls back if Claude starts working on its own (review B6)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  broker.hangup(call.id);
+  assert.equal(broker.calls.get(call.id).status, 'ended');
+  session.busy = true;
+  session.emit('turn-start');
+  assert.equal(broker.calls.get(call.id).status, 'parked');
+  session.emit('text', { delta: 'He terminado la tarea. ' });
+  session.emit('assistant-message', { text: 'He terminado la tarea.' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  assert.equal(broker.calls.get(call.id).status, 'ringing');
+});
+
+test('a prompt withdrawn while the user is on the line leaves Claude working, not "ready" (review B8)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  broker.setStreamBusy(call.id, true);
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'ls' } });
+  session.emit('permission-cancelled', { requestId: 'p1' });
+  const c = broker.calls.get(call.id);
+  assert.equal(c.awaitingClaude, true);
+  assert.equal(c.interactionKind, null);
+  assert.ok(!c.messages.some(m => /terminal/.test(m.text || '')));
 });

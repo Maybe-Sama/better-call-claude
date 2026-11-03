@@ -550,6 +550,14 @@ class SttManager {
     try { this.child.stdin.write(value ? 'listen\n' : 'pause\n'); } catch {}
   }
 
+  // ✕: the recognizer drops the phrase it is hearing. Whisper does it in place and answers 'cut'; Windows
+  // dictation restarts (cancelling the phrase) and answers 'listening'. true when that answer will come.
+  cut() {
+    if (!this.child || !this.listening) return false;
+    try { this.child.stdin.write(this.engine === 'whisper' ? 'cancel\n' : 'pause\nlisten\n'); } catch { return false; }
+    return true;
+  }
+
   // End of a call. Whisper stays loaded (paused) so the next call does not wait for the model.
   idle() {
     if (this.engine === 'whisper' && this.child) return this.setListening(false);
@@ -645,10 +653,12 @@ const metrics = new VoiceMetrics({
   sink: /^(1|true)$/i.test(process.env.AGENTCALL_VOICE_METRICS || '') ? jsonlSink(path.join(AGENTCALL_DATA, 'voice-metrics.jsonl')) : null,
 });
 
-function routeUserText({ callId, sessionId, text, urgency, source }) {
+function routeUserText({ callId, sessionId, text, urgency, source, early }) {
   const call = broker.calls.get(callId);
+  // Words begun before the question reached the user (early) are never its answer.
+  const answering = Boolean(call?.responder && !call.resolved) && !early;
   // Controlled call with nothing held: straight to that Claude session (new turn, addition or correction).
-  if (call?.stream && !(call.responder && !call.resolved) && streamCalls?.owns(callId)) {
+  if (call?.stream && !answering && streamCalls?.owns(callId)) {
     const result = streamCalls.say(callId, text, urgency || classifyUrgency(text));
     log(`Voz → sesión controlada ${result.route}${urgency === 'interrupt' ? ' (interrumpe)' : ''} (${String(text).length} caracteres, ${source})`);
     return result;
@@ -659,7 +669,6 @@ function routeUserText({ callId, sessionId, text, urgency, source }) {
     log(`Voz → cola de la sesión (${String(text).length} caracteres, ${source})`);
     return { ...broker.queueSessionSpeech(sessionId, text, urgency || classifyUrgency(text)), route: 'steer' };
   }
-  const answering = Boolean(call.responder && !call.resolved);
   const result = answering ? broker.submitUserText(callId, text) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
   log(`Voz → ${answering ? 'respuesta' : `cola ${result.urgency || ''}`} (${String(text).length} caracteres, ${source})`);
   return { ...result, route: answering ? 'answer' : 'steer' };
@@ -736,7 +745,9 @@ function lastKnownCwd() {
 }
 
 // options.cwd / options.fresh skip the dialogs (tests and automation); the button always asks.
+let quittingStreams = false; // AgentCall is closing its sessions to quit: no new one opens
 async function startStreamCall(options = {}) {
+  if (quittingStreams) return { ok: false, error: 'AgentCall se está cerrando.' };
   if (broker.activeId) return { ok: false, error: 'Ya estás en una llamada.' };
   let cwd = typeof options.cwd === 'string' && fs.existsSync(options.cwd) ? options.cwd : null;
   if (!cwd) {
@@ -758,6 +769,7 @@ async function startStreamCall(options = {}) {
     if (answer.response === 2) return { ok: false, cancelled: true };
     if (answer.response === 0) resume = last.id;
   }
+  if (quittingStreams) return { ok: false, error: 'AgentCall se está cerrando.' };
   try {
     const call = await streamController().start({ cwd, resume });
     return { ok: true, id: call.id };
@@ -836,8 +848,14 @@ function registerIpc() {
     voice.flushDraft(reason);
   };
   const leaveThen = async (id, reason, action) => {
+    const wasWorking = Boolean(broker.calls.get(id)?.awaitingClaude);
     await leaveCall(id, reason);
-    const ok = action();
+    // Claude finished (or asked something) during those seconds: nobody heard it, so instead of ending the
+    // call it calls back, as it would have a moment later.
+    const call = broker.calls.get(id);
+    const doneMeanwhile = wasWorking && call && broker.activeId === id && !call.awaitingClaude;
+    const ok = doneMeanwhile ? broker.hold(id) : action();
+    if (doneMeanwhile) { log('Claude terminó mientras colgabas: te llamará'); broker.ringBack(id); }
     if (broker.activeId === id) voice.cancelLeave(); // the call is still on: Claude may talk again
     return ok;
   };
@@ -860,9 +878,8 @@ function registerIpc() {
   ipcMain.handle('agentcall:adopt-draft', () => voice.adoptDraft());
   ipcMain.handle('agentcall:discard-draft', () => {
     log('UI: borrar lo escuchado');
-    voice.discardDraft();
     // The phrase in progress is cut in the recognizer too: words said after the ✕ start a new one.
-    if (stt?.listening) { stt.setListening(false); stt.setListening(true); }
+    voice.discardDraft({ cutting: Boolean(stt?.cut()) });
     return true;
   });
   ipcMain.on('agentcall:set-typing', (_e, value) => voice.setTyping(value));
@@ -896,14 +913,20 @@ app.whenReady().then(() => {
   app.on('activate', () => showWindow({ focus: true }));
 });
 
+let streamsClosing = null; // closeAll() in progress: every quit waits for it
 let streamsClosed = false;
 app.on('before-quit', (event) => {
   // Controlled sessions are closed (or killed) before AgentCall goes: left alone, a Claude would go
   // on using tools with nobody on the call.
-  if (streamCalls?.calls.size && !streamsClosed) {
+  if (streamsClosing) { event.preventDefault(); return; }
+  if (streamCalls?.busy() && !streamsClosed) {
     event.preventDefault();
-    streamsClosed = true;
-    streamCalls.closeAll().catch(() => {}).finally(() => app.quit());
+    quittingStreams = true;
+    streamsClosing = streamCalls.closeAll().catch(() => {}).finally(() => {
+      streamsClosing = null;
+      streamsClosed = true;
+      app.quit();
+    });
     return;
   }
   quitting = true;

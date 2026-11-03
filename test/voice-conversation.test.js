@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { VoiceConversation, classifyUrgency, HOLD_MS, BARGE_CONFIRM_MS, DUCK_AFTER_MS } = require('../src/voice/conversation');
+const { VoiceConversation, classifyUrgency, HOLD_MS, BARGE_CONFIRM_MS, DUCK_AFTER_MS, VAD_TAIL_MS } = require('../src/voice/conversation');
+// A voice still going this long after it began has really lasted BARGE_CONFIRM_MS (Whisper ends a phrase late).
+const SUSTAINED_MS = BARGE_CONFIRM_MS + VAD_TAIL_MS;
 
 // Fake clock + timers; `out` collects every event the conversation emits.
 function harness(options = {}) {
@@ -307,6 +309,8 @@ test('aec: sustained voice lowers Claude, and stops it if it goes on', () => {
   h.advance(DUCK_AFTER_MS);
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck'], 'no waiting for Whisper');
   h.advance(BARGE_CONFIRM_MS - DUCK_AFTER_MS);
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck'], 'the end of a phrase is reported 0.7 s late: not yet');
+  h.advance(VAD_TAIL_MS);
   assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'stop']);
   const duck = h.events('metric').find(m => m.name === 'bargein.duck_ms');
   assert.equal(duck.ms, DUCK_AFTER_MS + 90, 'from the onset of the voice');
@@ -653,7 +657,7 @@ function streamingAec(h) {
   h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Uso la skill de brainstorming.' });
   const noise = () => {
     h.conv.stt({ type: 'speech', state: 'start', utterance: 7, onset_ms: 90 });
-    h.advance(BARGE_CONFIRM_MS + 50);
+    h.advance(SUSTAINED_MS + 50);
     h.conv.stt({ type: 'speech', state: 'end', utterance: 7, silence_ms: 700, voiced_ms: 400 });
   };
   return { streamed, id, noise };
@@ -722,7 +726,7 @@ test('aec: a noise too short to be transcribed resumes as soon as it ends', () =
   const h = harness();
   const id = speakingCall(h);
   h.conv.stt({ type: 'speech', state: 'start', utterance: 3, onset_ms: 90 });
-  h.advance(BARGE_CONFIRM_MS + 20);
+  h.advance(SUSTAINED_MS + 20);
   h.conv.tts({ type: 'end', id, interrupted: true });
   h.conv.stt({ type: 'speech', state: 'end', utterance: 3, silence_ms: 700, voiced_ms: 300 });
   assert.equal(h.events('speak').at(-1).text, 'He terminado el cambio.');
@@ -749,4 +753,265 @@ test('echo is judged by the phrase each transcript belongs to', () => {
   h.conv.stt({ type: 'final', utterance: 2, text: 'Neon.', confidence: 0.9 });
   h.advance(3000);
   assert.deepEqual(h.events('commit').map(c => c.text), ['Neon.']);
+});
+
+// ── Full-day review (2026-11-03) ─────────────────────────────────────────────
+
+test('✕ with Windows dictation: the next phrase, after the recognizer restarted, is kept (review C2)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall());
+  h.conv.stt({ type: 'partial', text: 'ruido que no era nada' }); // no phrase ids, no voice events
+  h.conv.discardDraft({ cutting: true });
+  h.conv.stt({ type: 'final', text: 'ruido que no era nada', confidence: 0.6 }); // already in the pipe: dropped
+  h.conv.stt({ type: 'paused' });
+  h.conv.stt({ type: 'listening' });
+  h.conv.stt({ type: 'partial', text: 'Revisa el login' });
+  h.conv.stt({ type: 'final', text: 'Revisa el login.', confidence: 0.9 });
+  h.advance(8000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Revisa el login.']);
+});
+
+test('✕ with Whisper: transcripts of the cut phrase are dropped, a new phrase is kept (review C1)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall());
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 4, onset_ms: 90 });
+  h.conv.stt({ type: 'partial', utterance: 4, text: 'tecleo tecleo' });
+  h.conv.discardDraft({ cutting: true });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 4, cancelled: true });
+  h.conv.stt({ type: 'cut' });
+  h.conv.stt({ type: 'final', utterance: 4, text: 'tecleo tecleo', confidence: 0.7 });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 5, onset_ms: 90 });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 5, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 5, text: 'Mira los tests.', confidence: 0.9 });
+  h.advance(8000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Mira los tests.']);
+});
+
+test('✕ while a voice is lowering Claude: Claude is not cut afterwards (review C4)', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(DUCK_AFTER_MS + 300);
+  h.conv.discardDraft({ cutting: true });
+  h.advance(SUSTAINED_MS);
+  assert.deepEqual(h.events('tts').map(t => t.action), ['duck', 'unduck']);
+});
+
+test('muting mid-phrase does not cut Claude later, and says what it was holding (review C4, C8)', () => {
+  const h = harness();
+  speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(DUCK_AFTER_MS + 100);
+  h.conv.setMuted(true);
+  h.advance(SUSTAINED_MS);
+  assert.ok(!h.events('tts').some(t => t.action === 'stop'));
+
+  const g = harness();
+  g.conv.setCall(workingCall({ messages: [] }));
+  g.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  g.conv.setCall(workingCall({ messages: [assistant('Ya está compilado.', 9)] }));
+  assert.equal(g.events('speak').length, 0, 'held while the user talks');
+  g.conv.setMuted(true);
+  assert.equal(g.events('speak').at(-1)?.text, 'Ya está compilado.');
+});
+
+test('hanging up after a noise cut Claude: the rest is handed back, not lost (review C3)', () => {
+  const h = harness();
+  const unheard = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  const id = speakingCall(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 3, onset_ms: 90 });
+  h.advance(SUSTAINED_MS + 20);
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.conv.leave();
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 3, silence_ms: 700 });
+  h.conv.stt({ type: 'rejected', utterance: 3 });
+  assert.deepEqual(unheard.map(u => u.text), ['He terminado el cambio.']);
+  assert.equal(h.events('speak').length, 1, 'nothing is said while hanging up');
+});
+
+test('"espera" then En espera: nothing is sent, and Claude says the rest on return (review B1, C3)', () => {
+  const h = harness();
+  const unheard = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo subir los cambios a GitHub?')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: '¿Puedo subir los cambios a GitHub?' });
+  h.say('Espera.');
+  h.advance(3000);
+  assert.equal(h.events('commit').length, 0, 'a lone "espera" is never an answer');
+  h.conv.leave();
+  h.conv.flushDraft('pones la llamada en espera');
+  assert.equal(h.events('commit').length, 0, 'not even when leaving');
+  assert.deepEqual(unheard.map(u => u.text), ['¿Puedo subir los cambios a GitHub?']);
+});
+
+test('leave(): handing the rest back cannot make Claude start speaking again (review A2)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall());
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'He terminado el cambio.' });
+  // main.js: the unheard text bumps the message and the broker change calls setCall at once.
+  h.conv.on('unheard', () => h.conv.setCall(waitingCall({ messages: [{ ...assistant('He terminado el cambio.'), rev: 1 }] })));
+  h.conv.leave();
+  assert.equal(h.events('speak').length, 1, 'nothing new started while leaving');
+  h.conv.setCall(null);
+  h.conv.setCall(waitingCall({ messages: [{ ...assistant('He terminado el cambio.'), rev: 1 }] }));
+  assert.equal(h.events('speak').length, 2, 'said on picking up');
+});
+
+test('"sigue" after a cut finds the sentence even when the voice normalized it (review C5)', () => {
+  const h = harness();
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall({ messages: [assistant('Primero compilo. Tardará 30 s más o menos. Luego subo «todo».')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Tardará 30 segundos más o menos.' });
+  h.say('Para.');
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.advance(3000);
+  h.say('Sigue.');
+  h.advance(3000);
+  assert.equal(h.events('speak').at(-1).text, 'Tardará 30 s más o menos. Luego subo «todo».');
+});
+
+test('the Windows fallback voice keeps the echo filter on until its echo is gone (review C6)', () => {
+  const h = harness();
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall({ messages: [assistant('He revisado la configuración del servidor.')] }));
+  const { id } = h.events('speak')[0];
+  h.conv.setEchoCancelled(false); // the renderer fell back to speechSynthesis
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'He revisado la configuración del servidor.' });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(1500);
+  h.conv.tts({ type: 'end', id });
+  h.conv.setEchoCancelled(true); // fallback over
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.advance(400);
+  h.conv.stt({ type: 'final', utterance: 1, text: 'revisado la configuración del servidor', confidence: 0.8 });
+  h.advance(6000);
+  assert.equal(h.events('commit').length, 0, "Claude's own words are not the user's");
+});
+
+test('a recognizer restart mid-phrase closes that phrase: Claude is not held back forever (review C12)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(workingCall({ messages: [assistant('Ya está compilado.', 9)] }));
+  assert.equal(h.events('speak').length, 0);
+  h.conv.stt({ type: 'ready', engine: 'whisper' });
+  assert.equal(h.events('speak').at(-1)?.text, 'Ya está compilado.');
+});
+
+// Claude works between sentences with its streamed answer still open: nothing is audible then.
+function streamingIdle(h) {
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Voy a revisar los tests.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Voy a revisar los tests.' });
+  h.conv.tts({ type: 'idle', id });
+  return { streamed, id };
+}
+
+test('stream: talking while Claude works in silence is not an interruption (review: idle stream)', () => {
+  const h = harness();
+  const { streamed, id } = streamingIdle(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(SUSTAINED_MS + 100);
+  h.conv.stt({ type: 'partial', utterance: 1, text: 'y también mira el login' });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Y también mira el login.', confidence: 0.9 });
+  h.advance(6000);
+  assert.ok(!h.events('tts').some(t => t.action === 'stop' || t.action === 'duck'), 'nothing to cut');
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Y también mira el login.'], 'sent at once, not after the turn');
+  h.conv.streamSentence('He revisado los tests y el login.');
+  assert.equal(streamed.at(-1).text, 'He revisado los tests y el login.', 'the rest of the answer is heard');
+  assert.equal(streamed.at(-1).id, id);
+});
+
+test('stream: a cut keeps the rest of that message for "sigue", the next message is heard (review)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Voy a revisar los tests.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Voy a revisar los tests.' });
+  h.say('Y también el login.');
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.conv.streamSentence('Empiezo por los unitarios.');
+  assert.ok(!streamed.some(s => s.text === 'Empiezo por los unitarios.'), 'the cut message stays cut');
+  h.conv.streamMessageStart(); // Claude's next message (after the user's words reached it)
+  h.conv.streamSentence('Tests y login revisados.');
+  assert.equal(streamed.at(-1).text, 'Tests y login revisados.');
+});
+
+test('stream: a question waits for the sentence Claude is saying instead of cutting it (review A3)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Voy a subir los cambios.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Voy a subir los cambios.' });
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo hacer push?', 9)] }));
+  assert.ok(!h.events('tts').some(t => t.action === 'stop'), 'the sentence is not cut');
+  assert.equal(h.events('speak').length, 0);
+  h.conv.tts({ type: 'idle', id });
+  assert.equal(h.events('speak').at(-1).text, '¿Puedo hacer push?');
+});
+
+test('words begun before a permission reached the user are not its answer (review A1)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(600);
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo hacer git push --force?', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Vale, gracias, luego hablamos.', confidence: 0.9 });
+  h.advance(6000);
+  const [early] = h.events('commit');
+  assert.equal(early.route, 'steer');
+  assert.equal(early.early, true);
+  h.say('Sí, adelante.');
+  h.advance(6000);
+  const answer = h.events('commit').at(-1);
+  assert.equal(answer.route, 'answer');
+  assert.equal(answer.early, false);
+});
+
+test('a permission that arrives while the user hangs up is not answered by the flushed words (review A1)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.advance(600);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Vale, gracias, luego hablamos.', confidence: 0.9 });
+  h.conv.leave();
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo borrar la rama?', 9)] }));
+  h.conv.flushDraft('cuelgas');
+  const [commit] = h.events('commit');
+  assert.equal(commit.route, 'steer');
+  assert.equal(commit.early, true);
+});
+
+test('a question answered with a button before it was said is not said afterwards (live test 2026-11-03)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Voy a esperar un poco.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Voy a esperar un poco.' });
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo ejecutar ping?', 9)] }));
+  h.conv.setCall(workingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo ejecutar ping?', 9)] })); // "Permitir"
+  h.conv.tts({ type: 'idle', id });
+  h.conv.tts({ type: 'end', id });
+  assert.equal(h.events('speak').length, 0);
 });

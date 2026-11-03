@@ -2,7 +2,7 @@
 
 Same line protocol as the other engines (see stt-worker.ps1):
   stdout  {"type": "ready"|"listening"|"paused"|"partial"|"final"|"level"|"error", ...}  (ASCII JSON)
-  stdin   "listen" | "pause"; EOF ends the worker.
+  stdin   "listen" | "pause" | "cancel" (drop the phrase being heard, answered by {"type": "cut"}); EOF ends the worker.
 
 Audio is segmented with an adaptive energy detector: while the user speaks, the growing utterance is
 re-transcribed every PARTIAL_EVERY_S with a small fast model (live caption, ~0.5 s on CPU); after
@@ -418,6 +418,7 @@ def run_mic(segmenter, mic="", source="device"):
     frames = queue.Queue()
     listening = threading.Event()
     stop = threading.Event()
+    cut = threading.Event()  # ✕ in the app: the phrase in progress is dropped (applied by consume())
 
     def reader():
         for line in iter(sys.stdin.readline, ""):
@@ -443,13 +444,18 @@ def run_mic(segmenter, mic="", source="device"):
             elif cmd == "pause" and listening.is_set():
                 listening.clear()
                 emit({"type": "paused"})
+            elif cmd == "cancel":
+                if listening.is_set():
+                    cut.set()
+                else:
+                    emit({"type": "cut"})  # paused: nothing is being heard
         stop.set()
 
     threading.Thread(target=reader, daemon=True).start()
 
     if source == "stdin":
         emit({"type": "mic", "name": "AgentCall (cancelación de eco)"})
-        consume(segmenter, frames, listening, stop, SAMPLE_RATE)
+        consume(segmenter, frames, listening, stop, SAMPLE_RATE, cut)
         return
 
     import sounddevice as sd
@@ -469,10 +475,18 @@ def run_mic(segmenter, mic="", source="device"):
 
     block = int(device_rate * FRAME / SAMPLE_RATE)
     with sd.InputStream(device=device, samplerate=device_rate, channels=1, dtype="float32", blocksize=block, callback=callback):
-        consume(segmenter, frames, listening, stop, device_rate)
+        consume(segmenter, frames, listening, stop, device_rate, cut)
 
 
-def consume(segmenter, frames, listening, stop, device_rate):
+def drain(frames):
+    while not frames.empty():
+        try:
+            frames.get_nowait()
+        except queue.Empty:
+            break
+
+
+def consume(segmenter, frames, listening, stop, device_rate, cut=None):
     """Feeds captured audio to the segmenter in 30 ms frames until stdin closes."""
     pending = np.zeros(0, dtype=np.float32)
     was_listening = False
@@ -480,11 +494,15 @@ def consume(segmenter, frames, listening, stop, device_rate):
         if was_listening and not listening.is_set():
             segmenter.cancel()  # paused: drop the utterance and anything still being transcribed
             pending = np.zeros(0, dtype=np.float32)
-            while not frames.empty():  # audio captured just before the pause belongs to no one
-                try:
-                    frames.get_nowait()
-                except queue.Empty:
-                    break
+            drain(frames)  # audio captured just before the pause belongs to no one
+        if cut is not None and cut.is_set():
+            # Checked on every frame (a pause+listen pair is too quick to be seen here): the phrase being
+            # heard and its transcripts are dropped, what comes next is a new phrase.
+            cut.clear()
+            segmenter.cancel()
+            pending = np.zeros(0, dtype=np.float32)
+            drain(frames)
+            emit({"type": "cut"})
         was_listening = listening.is_set()
         try:
             chunk = frames.get(timeout=0.2)

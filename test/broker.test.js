@@ -593,3 +593,41 @@ test('hanging up an idle controlled call keeps it as "Colgada" for a while, then
   await new Promise(r => setTimeout(r, 50));
   assert.equal(broker.getSnapshot().calls.length, 0);
 });
+
+// ── Full-day review (2026-11-03) ─────────────────────────────────────────────
+
+test('a /saul reply that never stopped cleanly does not hide the next real result (review B5)', () => {
+  const broker = new CallBroker({ defaultMode: 'off', minResultMs: 0 });
+  broker.notePrompt({ session_id: 'q1', cwd: 'C:/w', prompt: '/saul on' });
+  // That turn ended without a Stop hook (Esc): the next prompt is a real task.
+  broker.notePrompt({ session_id: 'q1', cwd: 'C:/w', prompt: 'Refactoriza el módulo de pagos entero, con tests.' });
+  let answered = null;
+  broker.receiveCompletion({ session_id: 'q1', cwd: 'C:/w', last_assistant_message: 'He refactorizado el módulo de pagos y los tests pasan.' }, { responder: r => { answered = r; return true; }, hint: 'on' });
+  assert.equal(answered, null, 'held: it rings');
+  assert.equal(broker.getSnapshot().calls[0]?.status, 'ringing');
+});
+
+test('a ringing call pushed back to the queue keeps its place (review B9)', () => {
+  let t = 1000;
+  const broker = new CallBroker({ defaultMode: 'off', now: () => t });
+  const r = broker.receivePermission({ session_id: 'r1', cwd: 'C:/a', tool_name: 'Bash', tool_input: { command: 'ls' } }, () => true, 'on');
+  t += 1000;
+  const q = broker.receivePermission({ session_id: 'q1', cwd: 'C:/b', tool_name: 'Bash', tool_input: { command: 'pwd' } }, () => true, 'on');
+  assert.equal(broker.calls.get(r.id).status, 'ringing');
+  assert.equal(broker.calls.get(q.id).status, 'queued');
+  t += 1000;
+  const s = broker.openStreamCall({ sessionId: 'x1', cwd: 'C:/c' }); // "Llamar a Claude"
+  assert.equal(broker.calls.get(r.id).status, 'queued');
+  broker.dismiss(s.id);
+  assert.equal(broker.calls.get(r.id).status, 'ringing', 'the first one rings first');
+});
+
+test('a session driven twice (one closing, one resumed) stays driven until both let go (review A6)', () => {
+  const broker = new CallBroker({ defaultMode: 'on' });
+  broker.driveSession('d1');
+  broker.driveSession('d1');
+  broker.releaseSession('d1');
+  assert.equal(broker.sessionMode('d1', ''), 'off');
+  broker.releaseSession('d1');
+  assert.equal(broker.sessionMode('d1', ''), 'on');
+});
