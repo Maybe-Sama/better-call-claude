@@ -241,9 +241,10 @@ class StreamCallController extends EventEmitter {
 
   // The user left the call while Claude was still saying something: the rest is caught up on (turn
   // still running) or said when they pick the call up again.
-  unheard(callId, text) {
+  // done: the part of it that belongs to messages Claude already finished.
+  unheard(callId, text, { done = '' } = {}) {
     const entry = this.calls.get(callId);
-    if (!entry || !text) return;
+    if (!entry || (!text && !done)) return;
     const call = this.broker.calls.get(callId);
     // A question cut off: it is asked again whole when the user is back.
     if (call?.responder && !call.resolved) {
@@ -252,6 +253,8 @@ class StreamCallController extends EventEmitter {
       return;
     }
     if (entry.turnOpen) {
+      if (done) entry.missed.push(done);
+      if (!text) return;
       // Still being written: the whole message is caught up on once it ends (no half repeated); if the user
       // is back before that, from where they left it.
       if (entry.inMessage) { entry.msgMissed = true; entry.cutRest = text; }
@@ -260,7 +263,7 @@ class StreamCallController extends EventEmitter {
     }
     const last = call && [...call.messages].reverse().find(m => m.role === 'assistant');
     if (!last) return;
-    Object.assign(last, { silent: false, speech: text, rev: (last.rev || 0) + 1 });
+    Object.assign(last, { silent: false, speech: [done, text].filter(Boolean).join(' '), rev: (last.rev || 0) + 1 });
     this.broker.messagesChanged(callId);
   }
 

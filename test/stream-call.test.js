@@ -771,3 +771,19 @@ test('a heading and a list caught up on later say they are on screen (round 2 #1
   const last = broker.calls.get(call.id).messages.at(-1);
   assert.equal(last.speech, 'Te lo he dejado escrito en pantalla.');
 });
+
+test('En espera with sentences of two messages held: the finished one is not lost (round 4 #6)', async () => {
+  const { broker, ctl, session, spoken } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm2' });
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'Arreglo la primera.', { done: 'Primero miro la base de datos. Hay dos tablas rotas.' });
+  session.emit('text', { delta: 'Arreglo la primera. Luego la segunda. ' });
+  session.emit('assistant-message', { text: 'Arreglo la primera. Luego la segunda.' });
+  spoken.length = 0;
+  broker.answer(call.id);
+  await tick();
+  assert.deepEqual(spoken, ['Primero miro la base de datos. Hay dos tablas rotas.', 'Arreglo la primera. Luego la segunda.']);
+});

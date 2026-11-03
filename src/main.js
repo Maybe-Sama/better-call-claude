@@ -696,9 +696,9 @@ voice.on('speak-stream', ({ id, action, text }) => {
 voice.on('append', ({ text }) => sendToRenderer('agentcall:voice', { cmd: 'append', text }));
 // What Claude had not said when the user left a call is said when they pick it up again. A controlled
 // call catches up on it; a hook call says its last message again (a new revision of it).
-voice.on('unheard', ({ callId, text }) => {
+voice.on('unheard', ({ callId, text, done }) => {
   const call = broker.calls.get(callId);
-  if (call?.stream) { streamCalls?.unheard(callId, text); return; }
+  if (call?.stream) { streamCalls?.unheard(callId, text, { done }); return; }
   const last = call && [...call.messages].reverse().find(m => m.role === 'assistant');
   if (!last) return;
   last.rev = (last.rev || 0) + 1;
