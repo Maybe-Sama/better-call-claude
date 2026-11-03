@@ -251,9 +251,10 @@ class StreamCallController extends EventEmitter {
     if (call?.responder && !call.resolved) {
       const asked = [...call.messages].reverse().find(m => m.role === 'assistant');
       if (asked) {
-        asked.baseSpeech ??= asked.speech || asked.text;
+        // (Nothing new before it: it is said as it was, with whatever it already carried in front.)
         const before = [done, text].filter(Boolean).join(' ');
-        asked.speech = before ? `${before} ${asked.baseSpeech}` : asked.baseSpeech;
+        const now = asked.speech || asked.text;
+        if (before && !now.startsWith(before)) asked.speech = `${before} ${now}`;
         asked.rev = (asked.rev || 0) + 1;
         this.broker.messagesChanged(callId);
       }
@@ -298,9 +299,11 @@ class StreamCallController extends EventEmitter {
       this.voice.streamTurnStart();
       entry.voiceTurn = true;
     }
+    // Whole messages missed are finished ones (-1); the rest is the message being written.
+    const finished = entry.missed.slice(-3);
     const parts = this._missedParts(entry);
     entry.msgMissed = false;
-    for (const part of parts) this.voice.streamSentence(part);
+    parts.forEach((part, i) => this.voice.streamSentence(part, i < finished.length ? -1 : undefined));
   }
 
   // What the user did not hear of this turn, in order (taken: it is about to be said).

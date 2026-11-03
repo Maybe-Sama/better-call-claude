@@ -809,3 +809,34 @@ test('every published message has its own id (round 5 #1)', () => {
   const ids = broker.getSnapshot().calls[0].messages.map(m => m.id);
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('a question re-asked with what came before it keeps that when the user steps away again (round 6 #5)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'npm run migrate' } });
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'He preparado la migración: borra la tabla de usuarios.', { question: true });
+  const asked = broker.calls.get(call.id).messages.at(-1);
+  const first = asked.speech;
+  ctl.unheard(call.id, '', { question: true }); // left again during it
+  assert.equal(asked.speech, first, 'the destructive context stays in front');
+  assert.equal(asked.rev, 2);
+});
+
+test('catching up mid-turn tags whole missed messages as finished (round 6 #1)', async () => {
+  const { broker, ctl, session } = setup();
+  const tags = [];
+  ctl.voice.streamSentence = (s, msg) => tags.push([s, msg]);
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.busy = true;
+  session.emit('turn-start');
+  broker.hold(call.id);
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: 'Primero. ' });
+  session.emit('assistant-message', { text: 'Primero.' });
+  session.emit('assistant-start', { messageId: 'm2' });
+  session.emit('text', { delta: 'Segundo va. ' });
+  broker.answer(call.id);
+  await tick();
+  assert.deepEqual(tags, [['Primero.', -1], ['Segundo va.', undefined]]);
+});

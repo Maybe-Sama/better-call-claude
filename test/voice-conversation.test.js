@@ -168,6 +168,7 @@ test('"repíteme lo último" repeats the sentence that was cut', () => {
 test('acknowledgements fit what happened', () => {
   const h = harness();
   h.conv.setCall(waitingCall({ interactionKind: 'permission' }));
+  h.conv.tts({ type: 'end', id: h.events('speak')[0].id }); // (an acknowledgement never cuts what Claude says)
   h.conv.committed({ ok: true, route: 'answer', text: 'Sí.', decision: 'allow' });
   assert.deepEqual(h.events('ack').map(a => a.phrase), ['vale']);
   h.conv.committed({ ok: true, route: 'steer', urgency: 'interrupt', text: 'Para.' });
@@ -1593,4 +1594,101 @@ test('hand-back splits a finished message from the one being written inside one 
   h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Hay dos tablas sin índice.' });
   h.conv.leave();
   assert.deepEqual(unheard.map(({ done, text }) => ({ done, text })), [{ done: 'Hay dos tablas sin índice.', text: 'Creo los índices ahora.' }]);
+});
+
+// ── Regression review, round 6 (2026-11-03) ───────────────────────────────────
+
+test('a finished message still being heard when the next one has no sentence yet is handed back as finished (round 6 #1)', () => {
+  const h = harness();
+  const unheard = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamMessageStart();
+  h.conv.streamSentence('La migración ha fallado en producción.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'La migración ha fallado en producción.' });
+  h.conv.streamMessageStart(); // the next message started (after a tool), nothing of it yet
+  h.conv.leave();
+  assert.deepEqual(unheard.map(({ done, text }) => ({ done, text })), [{ done: 'La migración ha fallado en producción.', text: '' }]);
+});
+
+test('a result kept while the user replied mid-phrase is still said after the reply (round 6 #2)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ messages: [assistant('Listo: la migración ha fallado en producción.', 9)] }));
+  // The real broker resolves the Stop with the reply: the call is no longer waiting for it.
+  h.conv.on('commit', () => h.conv.setCall(workingCall({ messages: [assistant('Listo: la migración ha fallado en producción.', 9), { role: 'user', text: 'Y luego sube los cambios.', at: 10 }] })));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Y luego sube los cambios.', confidence: 0.9 });
+  h.advance(4000);
+  const [commit] = h.events('commit');
+  assert.equal(commit.early, true);
+  assert.equal(commit.unheard, false, 'the user is about to hear it: Claude is not asked to repeat it');
+  assert.equal(h.events('speak').at(-1)?.text, 'Listo: la migración ha fallado en producción.');
+});
+
+test('"Vale." after answering one question does not cut the next question (round 6 #3)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ interactionKind: 'ask', messages: [assistant('¿Qué base de datos uso?', 1)] }));
+  h.conv.tts({ type: 'end', id: h.events('speak')[0].id });
+  h.conv.setCall(waitingCall({ interactionKind: 'ask', messages: [assistant('¿Qué base de datos uso?', 1), assistant('¿Qué ORM uso?', 2)] }));
+  const next = h.events('speak').at(-1);
+  assert.equal(next.text, '¿Qué ORM uso?');
+  h.conv.committed({ ok: true, route: 'answer', text: 'Postgres.', nextQuestion: true });
+  assert.ok(!h.events('tts').some(t => t.action === 'stop' && t.id === next.id), 'not cut');
+  assert.equal(h.events('ack').length, 0);
+});
+
+test('without echo cancellation, "No, para." begun while Claude was quiet is the user\'s (round 6 #4)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Primero miro la carpeta.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Primero miro la carpeta.' });
+  h.conv.tts({ type: 'idle', id });
+  h.advance(5000);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 4, onset_ms: 90 });
+  h.advance(300);
+  h.conv.streamSentence('Ahora borro la carpeta de compilación.');
+  h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Ahora borro la carpeta de compilación.' });
+  h.advance(900);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 4, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 4, text: 'No, para.', confidence: 0.9 });
+  h.advance(3000);
+  assert.ok(h.events('tts').some(t => t.action === 'stop'), 'Claude stops');
+  assert.deepEqual(h.events('commit').map(c => c.text), ['No, para.']);
+});
+
+test('a question resumed after a noise is still the question when the user leaves (round 6 #6)', () => {
+  const h = harness();
+  const unheard = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('Claude pide permiso para usar Bash. ¿Lo permites?', 9)] }));
+  const { id } = h.events('speak')[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Claude pide permiso para usar Bash.' });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 3, onset_ms: 90 });
+  h.advance(SUSTAINED_MS + 20);
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 3, silence_ms: 700, voiced_ms: 300 }); // no transcript: noise
+  const again = h.events('speak').at(-1);
+  h.conv.tts({ type: 'chunk', id: again.id, seq: 0, text: again.text });
+  h.conv.leave();
+  assert.equal(unheard.at(-1).question, true);
+  assert.equal(unheard.at(-1).text, '');
+});
+
+test('a permission withdrawn after it was handed back is not asked again (round 6 #9)', () => {
+  const h = harness();
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [{ ...assistant('¿Lo permites?', 9), kind: 'permission' }] }));
+  h.conv.setCall(null);
+  h.conv.setCall(workingCall({ interactionKind: null, messages: [{ ...assistant('¿Lo permites?', 9), kind: 'permission', rev: 1 }] }));
+  assert.equal(h.events('speak').length, 1, 'said once, when it was current');
 });
