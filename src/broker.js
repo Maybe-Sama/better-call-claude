@@ -527,7 +527,8 @@ class CallBroker extends EventEmitter {
     return true;
   }
 
-  submitUserText(id, rawText) {
+  // unheard: Claude's result came while the user was leaving the call and was not heard.
+  submitUserText(id, rawText, { unheard = false } = {}) {
     const call = this.calls.get(id);
     const text = cleanText(rawText, 4000);
     if (!call || call.status !== 'active' || !text) return { ok: false, error: 'No hay una llamada activa o el texto está vacío.' };
@@ -544,7 +545,9 @@ class CallBroker extends EventEmitter {
       this._resolve(call, {
         hookSpecificOutput: {
           hookEventName: 'Stop',
-          additionalContext: `El usuario ha escuchado tu resultado en una llamada de AgentCall y ha respondido (por voz o texto): «${text}». Atiende su respuesta en esta misma sesión.`,
+          additionalContext: unheard
+            ? `Mientras terminabas, el usuario te ha dicho por la llamada de voz de AgentCall: «${text}». Todavía no ha oído tu último resultado: resúmeselo en una frase y atiende lo que te ha dicho en esta misma sesión.`
+            : `El usuario ha escuchado tu resultado en una llamada de AgentCall y ha respondido (por voz o texto): «${text}». Atiende su respuesta en esta misma sesión.`,
         },
       });
       return { ok: true, resolved: true, continued: true };

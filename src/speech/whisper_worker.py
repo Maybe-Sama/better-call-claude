@@ -204,7 +204,7 @@ class Transcriber(threading.Thread):
             # A speculative final IS the final if the silence lasts: same model and settings.
             text, confidence = self.transcribe(audio, final=(kind in ("final", "spec")))
         except Exception as exc:  # keep the worker alive
-            emit({"type": "error", "engine": "whisper", "message": str(exc)[:300]})
+            emit({"type": "error", "engine": "whisper", "message": str(exc)[:300], "utterance": utt_id, "kind": kind})
             if kind == "spec":
                 with self.cv:
                     entry = self.spec.pop(utt_id, None)

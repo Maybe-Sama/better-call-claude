@@ -655,8 +655,10 @@ const metrics = new VoiceMetrics({
 
 function routeUserText({ callId, sessionId, text, urgency, source, early }) {
   const call = broker.calls.get(callId);
-  // Words begun before the question reached the user (early) are never its answer.
-  const answering = Boolean(call?.responder && !call.resolved) && !early;
+  // Words begun before a question reached the user (early) are never its answer. To a result nobody heard
+  // they are still the user's reply, with Claude told the result was not heard.
+  const held = Boolean(call?.responder && !call.resolved);
+  const answering = held && (!early || call.interactionKind === 'stop');
   // Controlled call with nothing held: straight to that Claude session (new turn, addition or correction).
   if (call?.stream && !answering && streamCalls?.owns(callId)) {
     const result = streamCalls.say(callId, text, urgency || classifyUrgency(text));
@@ -669,7 +671,7 @@ function routeUserText({ callId, sessionId, text, urgency, source, early }) {
     log(`Voz → cola de la sesión (${String(text).length} caracteres, ${source})`);
     return { ...broker.queueSessionSpeech(sessionId, text, urgency || classifyUrgency(text)), route: 'steer' };
   }
-  const result = answering ? broker.submitUserText(callId, text) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
+  const result = answering ? broker.submitUserText(callId, text, { unheard: Boolean(early) }) : broker.queueUserSpeech(callId, text, urgency || classifyUrgency(text));
   log(`Voz → ${answering ? 'respuesta' : `cola ${result.urgency || ''}`} (${String(text).length} caracteres, ${source})`);
   return { ...result, route: answering ? 'answer' : 'steer' };
 }
@@ -854,7 +856,8 @@ function registerIpc() {
     const doneMeanwhile = leaving && wasWorking && call && broker.activeId === id && !call.awaitingClaude;
     if (leaving) voice.flushDraft(reason, { early: doneMeanwhile });
     const ok = doneMeanwhile && broker.calls.has(id) ? broker.hold(id) : action();
-    if (doneMeanwhile) { log('Claude terminó mientras colgabas: te llamará'); broker.ringBack(id); }
+    // (If the user's words gave Claude more work, the held call rings when that is done instead.)
+    if (doneMeanwhile && !broker.calls.get(id)?.awaitingClaude) { log('Claude terminó mientras colgabas: te llamará'); broker.ringBack(id); }
     if (broker.activeId === id) voice.cancelLeave(); // the call is still on: Claude may talk again
     return ok;
   };

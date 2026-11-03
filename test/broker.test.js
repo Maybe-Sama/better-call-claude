@@ -631,3 +631,15 @@ test('a session driven twice (one closing, one resumed) stays driven until both 
   broker.releaseSession('d1');
   assert.equal(broker.sessionMode('d1', ''), 'on');
 });
+
+test('words said after a result nobody heard resolve its Stop, telling Claude it was not heard (round 3 #6)', () => {
+  const broker = new CallBroker({ defaultMode: 'off', minResultMs: 0 });
+  broker.notePrompt({ session_id: 'u1', cwd: 'C:/w', prompt: 'Arregla los tests del login, por favor.' });
+  let answered = null;
+  const call = broker.receiveCompletion({ session_id: 'u1', cwd: 'C:/w', last_assistant_message: 'Fallan tres tests en el login.' }, { responder: r => { answered = r; return true; }, hint: 'on' });
+  broker.answer(call.id);
+  const result = broker.submitUserText(call.id, 'Y luego sube los cambios a la rama.', { unheard: true });
+  assert.equal(result.resolved, true);
+  assert.match(answered.hookSpecificOutput.additionalContext, /Todavía no ha oído tu último resultado/);
+  assert.match(answered.hookSpecificOutput.additionalContext, /sube los cambios/);
+});
