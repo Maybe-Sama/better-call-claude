@@ -841,20 +841,19 @@ function registerIpc() {
   // before the call leaves. Hook calls keep their own hang-up path (the words go to the session's queue).
   // Any call: what the user was still saying (its transcript may be seconds away) reaches Claude before
   // the call leaves, as the answer to what Claude holds or as something for it to take into account.
-  const leaveCall = async (id, reason) => {
-    if (!broker.calls.has(id) || id !== broker.activeId) return;
-    voice.leave();               // Claude goes quiet at once; what it had not said is kept
-    await voice.settle(3500);    // the end of the phrase (0.7 s of silence) plus its transcript
-    voice.flushDraft(reason);
-  };
   const leaveThen = async (id, reason, action) => {
+    const leaving = broker.calls.has(id) && id === broker.activeId;
     const wasWorking = Boolean(broker.calls.get(id)?.awaitingClaude);
-    await leaveCall(id, reason);
-    // Claude finished (or asked something) during those seconds: nobody heard it, so instead of ending the
-    // call it calls back, as it would have a moment later.
+    if (leaving) {
+      voice.leave();               // Claude goes quiet at once; what it had not said is kept
+      await voice.settle(3500);    // the end of the phrase (0.7 s of silence) plus its transcript
+    }
+    // Claude finished (or asked something) during those seconds: nobody heard it, so what the user said is
+    // not an answer to it, and instead of ending the call it calls back, as it would have a moment later.
     const call = broker.calls.get(id);
-    const doneMeanwhile = wasWorking && call && broker.activeId === id && !call.awaitingClaude;
-    const ok = doneMeanwhile ? broker.hold(id) : action();
+    const doneMeanwhile = leaving && wasWorking && call && broker.activeId === id && !call.awaitingClaude;
+    if (leaving) voice.flushDraft(reason, { early: doneMeanwhile });
+    const ok = doneMeanwhile && broker.calls.has(id) ? broker.hold(id) : action();
     if (doneMeanwhile) { log('Claude terminó mientras colgabas: te llamará'); broker.ringBack(id); }
     if (broker.activeId === id) voice.cancelLeave(); // the call is still on: Claude may talk again
     return ok;

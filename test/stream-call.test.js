@@ -755,3 +755,19 @@ test('a prompt withdrawn while the user is on the line leaves Claude working, no
   assert.equal(c.interactionKind, null);
   assert.ok(!c.messages.some(m => /terminal/.test(m.text || '')));
 });
+
+test('a heading and a list caught up on later say they are on screen (round 2 #11)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  ctl.createChunker = () => ({ push: () => [], finish: () => '' }); // what SpeechChunker gives for it
+  broker.hold(call.id);
+  session.busy = true;
+  session.emit('turn-start');
+  session.emit('assistant-start', { messageId: 'm1' });
+  session.emit('text', { delta: '## Resumen\n\n- Uno\n- Dos' });
+  session.emit('assistant-message', { text: '## Resumen\n\n- Uno\n- Dos' });
+  session.busy = false;
+  session.emit('turn-end', { terminalReason: 'completed', aborted: false });
+  const last = broker.calls.get(call.id).messages.at(-1);
+  assert.equal(last.speech, 'Te lo he dejado escrito en pantalla.');
+});

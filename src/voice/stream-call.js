@@ -5,12 +5,12 @@
 // an interruption really stops Claude. Permission prompts and AskUserQuestion go through the broker
 // like hook prompts do, so they are answered by voice, buttons or text exactly as in hook mode.
 const { EventEmitter } = require('node:events');
-const { toSpeech } = require('../speech-text');
+const { stripMarkdown } = require('../speech-text');
 
 const GREETING = 'Dime.';
 // What is heard of a message that is all list, table or code (the voice never reads those).
 const ON_SCREEN = 'Te lo he dejado escrito en pantalla.';
-const speechOf = text => toSpeech(text) || ON_SCREEN;
+
 
 // AgentCall's own hooks are off inside the session it drives, so CALL_RULES never reach it: these do.
 // Everything Claude writes is spoken while it is written, so the text itself has to be speech.
@@ -173,7 +173,7 @@ class StreamCallController extends EventEmitter {
       const msg = this.broker.addCallMessage(callId, { role: 'assistant', text, speech: '', silent: true, kind: 'stream' });
       if (msg) entry.turnMsgs.push(msg);
       // What was missed of it already went in front of a question: not said a second time.
-      if (!prompted && (entry.msgMissed || !this._onLine(callId))) entry.missed.push(speechOf(text));
+      if (!prompted && (entry.msgMissed || !this._onLine(callId))) entry.missed.push(this._speechOf(text));
       entry.offline = [];
       entry.msgMissed = false;
       entry.cutRest = ''; // the whole message is in `missed` now
@@ -182,7 +182,7 @@ class StreamCallController extends EventEmitter {
       if (!aborted && entry.chunker) this._finishMessage(callId, entry); // a message that never reported its end
       const last = entry.turnMsgs.at(-1);
       // An answer that was all list, table or code is never silent.
-      if (!aborted && last && !entry.lastMsgSpoke) this._say(callId, entry, [speechOf(last.text)]);
+      if (!aborted && last && !entry.lastMsgSpoke) this._say(callId, entry, [ON_SCREEN]);
       entry.chunker = null;
       entry.turnOpen = false;
       entry.inMessage = false;
@@ -195,7 +195,7 @@ class StreamCallController extends EventEmitter {
       const end = entry.turnMsgs.at(-1);
       if (!this._onLine(callId) && end && (entry.missed.length || entry.msgMissed || entry.offline.length || entry.cutRest || end.kind === 'error')) {
         end.silent = false;
-        if (end.kind !== 'error') end.speech = speechOf(end.text);
+        if (end.kind !== 'error') end.speech = this._speechOf(end.text);
         end.rev = (end.rev || 0) + 1;
         this.broker.messagesChanged(callId);
       }
@@ -300,6 +300,13 @@ class StreamCallController extends EventEmitter {
     entry.cutRest = '';
     entry.offline = [];
     return parts;
+  }
+
+  // What is heard of a message caught up on later: what the voice would have said live, or, if that is
+  // nothing (all list, table or code), that it is on screen.
+  _speechOf(text) {
+    const c = this.createChunker();
+    return stripMarkdown([...c.push(String(text || '')), c.finish()].filter(Boolean).join(' ')).trim() || ON_SCREEN;
   }
 
   // The end of a message (its last sentence, or a closing question) once it is complete.
