@@ -412,7 +412,7 @@ test('leaving a call mid-sentence hands back what Claude had not said yet (revie
   h.conv.tts({ type: 'chunk', id, seq: 0, text: 'He mirado el login.' });
   h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Falla la cookie.' });
   h.conv.setCall(null);
-  assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.', done: '' }]);
+  assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.', done: '', question: false }]);
 });
 
 test('Colgar: Claude goes quiet at once, its unheard rest is handed back, nothing new is said (round 3 #1, #6)', () => {
@@ -425,7 +425,7 @@ test('Colgar: Claude goes quiet at once, its unheard rest is handed back, nothin
   const { id } = h.events('speak')[0];
   h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Falla la cookie.' });
   h.conv.leave();
-  assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.', done: '' }]);
+  assert.deepEqual(unheard, [{ callId: 'c1', text: 'Falla la cookie. Lo arreglo ahora.', done: '', question: false }]);
   assert.ok(h.events('tts').some(t => t.action === 'stop'));
   h.conv.streamTurnStart();
   h.conv.streamSentence('Ya está arreglado.');
@@ -843,7 +843,7 @@ test('"espera" then En espera: nothing is sent, and Claude says the rest on retu
   h.conv.leave();
   h.conv.flushDraft('pones la llamada en espera');
   assert.equal(h.events('commit').length, 0, 'not even when leaving');
-  assert.deepEqual(unheard.map(u => u.text), ['¿Puedo subir los cambios a GitHub?']);
+  assert.deepEqual(unheard.map(u => u.question), [true], 'the question is asked again, whole');
 });
 
 test('leave(): handing the rest back cannot make Claude start speaking again (review A2)', () => {
@@ -1475,4 +1475,122 @@ test('a late transcript of a phrase said while Claude was quiet does not cut Cla
   h.advance(7000);
   assert.deepEqual(h.events('commit').map(c => c.text), ['Y mira el login también.']);
   assert.ok(streamed.length);
+});
+
+// ── Regression review, round 5 (2026-11-03) ───────────────────────────────────
+
+test('a question added in the same millisecond as Claude\'s silent message is still said (round 5 #1)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [{ role: 'assistant', text: 'Necesito instalar una dependencia.', speech: '', silent: true, at: 50, id: 1 }] }));
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [
+    { role: 'assistant', text: 'Necesito instalar una dependencia.', speech: '', silent: true, at: 50, id: 1 },
+    { role: 'assistant', text: '¿Puedo ejecutar npm install?', speech: '¿Puedo ejecutar npm install?', at: 50, id: 2 },
+  ] }));
+  assert.equal(h.events('speak').at(-1)?.text, '¿Puedo ejecutar npm install?');
+});
+
+test('a reply begun before a result reached the user tells Claude the result was not heard (round 5 #2)', () => {
+  const h = harness();
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 1, onset_ms: 90 });
+  h.conv.setCall(waitingCall({ messages: [assistant('Listo: la migración ha fallado en producción.', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 1, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 1, text: 'Y luego sube los cambios.', confidence: 0.9 });
+  h.advance(4000);
+  const [commit] = h.events('commit');
+  assert.equal(commit.early, true);
+  assert.equal(h.events('speak').at(-1)?.text, 'Listo: la migración ha fallado en producción.', 'and the result is still said');
+});
+
+test('"no, para" said just before Claude goes on stops it at once (round 5 #3)', () => {
+  const h = harness();
+  const { id } = streamingIdle(h);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 5, onset_ms: 90 });
+  h.advance(900);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 5, silence_ms: 700 });
+  h.advance(100);
+  h.conv.streamSentence('Borro la carpeta de compilación.');
+  h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Borro la carpeta de compilación.' });
+  h.advance(900);
+  h.conv.stt({ type: 'final', utterance: 5, text: 'No, para, no borres nada.', confidence: 0.9 });
+  assert.ok(h.events('tts').some(t => t.action === 'stop'), 'Claude stops');
+  h.advance(3000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['No, para, no borres nada.']);
+});
+
+test('a noise cut waits for the transcript still on its way before Claude goes on (round 5 #3)', () => {
+  const h = harness();
+  const { streamed, id, noise } = streamingAec(h);
+  noise();
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 8, onset_ms: 90 }); // the user says something after the cough
+  h.conv.stt({ type: 'rejected', utterance: 7 }); // the cough had no words
+  assert.ok(!streamed.some(s => s.id !== id), 'not while the user is talking');
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 8, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 8, text: 'No, para.', confidence: 0.9 });
+  h.advance(3000);
+  assert.ok(!streamed.some(s => s.id !== id), 'the cut stands');
+  assert.deepEqual(h.events('commit').map(c => c.text), ['No, para.']);
+});
+
+test('without echo cancellation, a correction that reuses Claude\'s next words is the user\'s (round 5 #4)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Primero miro el módulo.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Primero miro el módulo.' });
+  h.conv.tts({ type: 'idle', id });
+  h.advance(5000);
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 4, onset_ms: 90 });
+  h.advance(500);
+  h.conv.streamSentence('Ahora miro los tests de integración del módulo.');
+  h.conv.tts({ type: 'chunk', id, seq: 1, text: 'Ahora miro los tests de integración del módulo.' });
+  h.advance(1500);
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 4, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 4, text: 'Y los tests de integración, también.', confidence: 0.9 });
+  h.conv.tts({ type: 'end', id });
+  h.advance(7000);
+  assert.deepEqual(h.events('commit').map(c => c.text), ['Y los tests de integración, también.']);
+});
+
+test('"espera… sigue" before a kept permission was heard resumes Claude\'s voice (round 5 #5)', () => {
+  const h = harness();
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setEchoCancelled(true);
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamSentence('Voy a instalar dos paquetes.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Voy a instalar dos paquetes.' });
+  h.say('Espera.');
+  h.conv.tts({ type: 'end', id, interrupted: true });
+  h.advance(5000);
+  h.conv.setCall(waitingCall({ interactionKind: 'permission', messages: [assistant('¿Puedo ejecutar npm install?', 9)] }));
+  h.conv.stt({ type: 'speech', state: 'start', utterance: 9, onset_ms: 90 });
+  h.conv.stt({ type: 'speech', state: 'end', utterance: 9, silence_ms: 700 });
+  h.conv.stt({ type: 'final', utterance: 9, text: 'Sigue.', confidence: 0.9 });
+  h.advance(3000);
+  assert.equal(h.events('commit').length, 0, 'nothing is sent to Claude');
+});
+
+test('hand-back splits a finished message from the one being written inside one stream (round 5 #6)', () => {
+  const h = harness();
+  const unheard = [];
+  h.conv.on('unheard', u => unheard.push(u));
+  const streamed = [];
+  h.conv.on('speak-stream', s => streamed.push(s));
+  h.conv.setCall(workingCall({ messages: [] }));
+  h.conv.streamTurnStart();
+  h.conv.streamMessageStart();
+  h.conv.streamSentence('Hay dos tablas sin índice.');
+  h.conv.streamMessageStart();
+  h.conv.streamSentence('Creo los índices ahora.');
+  const { id } = streamed[0];
+  h.conv.tts({ type: 'chunk', id, seq: 0, text: 'Hay dos tablas sin índice.' });
+  h.conv.leave();
+  assert.deepEqual(unheard.map(({ done, text }) => ({ done, text })), [{ done: 'Hay dos tablas sin índice.', text: 'Creo los índices ahora.' }]);
 });

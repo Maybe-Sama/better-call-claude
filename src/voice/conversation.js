@@ -132,8 +132,8 @@ class VoiceConversation extends EventEmitter {
       // Another call (or none): nothing of the previous one may keep playing or count as echo. What
       // Claude had not said yet is handed back, so it can be heard when the user picks that call up.
       if (previous) {
-        const { text, done } = this._unheardText();
-        if (text || done) this.emit('unheard', { callId: previous, text, done });
+        const { text, done, question } = this._unheardText();
+        if (text || done || question) this.emit('unheard', { callId: previous, text, done, question });
       }
       if (this.playing) this._stopTts();
       this.leaving = false;
@@ -160,7 +160,7 @@ class VoiceConversation extends EventEmitter {
         : call.awaitingClaude ? 'working' : 'informing';
     // A new question or permission: words begun before it reached the user cannot be its answer.
     const asked = this.turn === 'awaitingUser' ? [...(call.messages || [])].reverse().find(m => m.role === 'assistant') : null;
-    const key = asked ? `${call.id}:${asked.at}` : null;
+    const key = asked ? `${call.id}:${asked.id ?? asked.at}` : null;
     if (key !== this.promptKey) {
       this.promptKey = key;
       this.askedAt = key && !this.leaving ? this.now() : null;
@@ -196,7 +196,7 @@ class VoiceConversation extends EventEmitter {
       this.pendingTimer = null;
       if (this.leaving) return;
       // A cut whose transcript never came (lost, recognizer restarted, muted) was not words.
-      if (this.noiseCut && this._userQuiet() && this.now() - (this.speechEndEventAt || 0) >= ADAPTIVE.finalTimeoutMs) this._resumeAfterNoise();
+      if (this.noiseCut && this._userQuiet()) this._resumeAfterNoise();
       this._releaseHeld();
       if (this.pendingSpeak && this._userQuiet()) this._flushPendingSpeak();
       this._watchPending();
@@ -209,13 +209,13 @@ class VoiceConversation extends EventEmitter {
     if (!this.msgWaiting && !this.heldStream.length) return;
     if (this.leaving || this.noiseCut || this.holding || !this._userQuiet()) return;
     if (this._busyVoice() && !(this.streamOpen && this.playing.id === this.streamId)) return; // after what is being heard
-    const items = this.heldStream.map(h => h.text);
+    const items = this.heldStream;
     this.heldStream = [];
     this.msgWaiting = false;
     this.streamCut = false;
     if (!items.length) return;
-    if (this.streamOpen) for (const sentence of items) this.streamSentence(sentence);
-    else this._speak(items.join(' '));
+    if (this.streamOpen) for (const h of items) this.streamSentence(h.text, h.msg);
+    else this._speak(items.map(h => h.text).join(' '));
   }
 
   // Claude's voice is saying something that must not be cut by something else of Claude's (an
@@ -235,18 +235,28 @@ class VoiceConversation extends EventEmitter {
   // What Claude had not said when the user left: the rest of what was playing, a message kept until
   // the user finished talking, and what a cut not confirmed as words (a noise, a lone "espera") left.
   // done: what belongs to messages Claude already finished (when held sentences of the current one follow).
+  // question: the question held in the call was being asked or kept (the call asks it again, whole).
   _unheardText() {
-    let said = '';
-    if (this.playing && !this.playing.ack && !this.playing.idle) said = this._remainder(this.playing);
-    else if (this.interrupted && (this.noiseCut || this.lastCut || this.holding)) said = this._remainder(this.interrupted);
     const join = list => list.filter(Boolean).join(' ').trim();
-    const held = this.heldStream;
-    const current = held.filter(h => h.msg === this.msgSeq).map(h => h.text);
-    const earlier = held.filter(h => h.msg !== this.msgSeq).map(h => h.text);
-    // With sentences of the current message held, what was being said belongs to an earlier one.
-    const done = current.length ? join([said, ...earlier]) : '';
-    const text = current.length ? join([...current, this.pendingSpeak]) : join([said, ...earlier, this.pendingSpeak]);
-    return { text, done };
+    const src = this.playing && !this.playing.ack && !this.playing.idle ? this.playing
+      : this.interrupted && (this.noiseCut || this.lastCut || this.holding) ? this.interrupted : null;
+    const asking = this._asking();
+    let question = asking && this.pendingFor === this.promptKey && Boolean(this.pendingSpeak);
+    let doneSaid = '';
+    let curSaid = '';
+    if (src && asking && src.forPrompt === this.promptKey) question = true;
+    else if (src) {
+      const from = this._remainderAt(src);
+      // Where the message Claude is writing now starts in what was being said: before it, finished ones.
+      const start = (src.msgStarts || []).find(m => m.msg === this.msgSeq)?.at;
+      if (start != null && start > from) { doneSaid = src.text.slice(from, start).trim(); curSaid = src.text.slice(start).trim(); }
+      else curSaid = src.text.slice(from).trim();
+    }
+    const current = this.heldStream.filter(h => h.msg === this.msgSeq).map(h => h.text);
+    const earlier = this.heldStream.filter(h => h.msg !== this.msgSeq).map(h => h.text);
+    const pending = question ? '' : this.pendingSpeak;
+    if (!current.length && !curSaid) return { done: '', text: join([doneSaid, ...earlier, pending]), question };
+    return { done: join([doneSaid, ...earlier]), text: join([curSaid, ...current, pending]), question };
   }
 
   // Recognised words still waiting for the end of the turn are sent now instead of being dropped
@@ -256,19 +266,19 @@ class VoiceConversation extends EventEmitter {
   leave() {
     if (!this.call) return;
     const callId = this.call.id;
-    const { text: unheard, done } = this._unheardText();
+    const { text: unheard, done, question } = this._unheardText();
     // Leaving first: handing the rest back changes the call, and nothing may start playing again here.
     this.leaving = true;
     if (this.playing) this._stopTts();
     this.pendingSpeak = null;
     this.heldStream = [];
     this.msgWaiting = false;
-    if (unheard || done) {
+    if (unheard || done || question) {
       // Handed back once: what a pending cut would have resumed is now the call's to say later.
       this.interrupted = null;
       this.noiseCut = null;
       this.lastCut = null;
-      this.emit('unheard', { callId, text: unheard, done });
+      this.emit('unheard', { callId, text: unheard, done, question });
     }
     this._ui();
   }
@@ -510,7 +520,7 @@ class VoiceConversation extends EventEmitter {
     // an interruption of it: its words wait in the draft until Claude has finished.
     // (A stream that went quiet and spoke again started again then.)
     const before = endedAt != null && this.playing && endedAt < Math.max(this.playing.startedAt, this.playing.resumedAt || 0);
-    if (this.speaking() && !before) this._bargeIn('final');
+    if (this.speaking() && (!before || classifyUrgency(text) === 'interrupt')) this._bargeIn('final');
     if (this.typing) {
       this.emit('append', { text });
       policy.final(this.now(), '', 0); // the transcript arrived (it went to the box), the turn need not wait for it
@@ -535,6 +545,16 @@ class VoiceConversation extends EventEmitter {
     this._afterUser();
   }
 
+  // A question or permission is held in the call (a result is not a question).
+  _asking() {
+    return Boolean(this.promptKey) && (this.kind === 'permission' || this.kind === 'ask');
+  }
+
+  // The question, permission or result held in the call had reached the user before these words began.
+  _heardPrompt() {
+    return this.askedAt != null && (this.draftStartAt == null || this.draftStartAt >= this.askedAt);
+  }
+
   // Nothing of the user's is in flight: not talking, no draft, no transcript still to come.
   _userQuiet() {
     // As long as the turn itself waits for it (from the end of the phrase as reported).
@@ -552,7 +572,7 @@ class VoiceConversation extends EventEmitter {
     if (this.leaving) return; // the user is hanging up: nothing new is said (it stays unheard)
     const latest = [...(call.messages || [])].reverse().find(m => m.role === 'assistant');
     if (!latest) return;
-    const key = `${call.id}:${latest.at}:${latest.rev || 0}`; // rev: to be said (again) after the user missed it
+    const key = `${call.id}:${latest.id ?? latest.at}:${latest.rev || 0}`; // rev: to be said (again) after the user missed it
     if (this.spokenKeys.has(key)) return;
     this.spokenKeys.add(key);
     if (this.spokenKeys.size > 500) this.spokenKeys.delete(this.spokenKeys.values().next().value);
@@ -563,14 +583,14 @@ class VoiceConversation extends EventEmitter {
     // Claude is still saying something (the sentence before a question, an earlier message): this comes
     // after it, not over it.
     if (this._busyVoice()) { this._holdSpeak(text); return; }
-    this._speak(text);
+    this._speak(text, this._asking() ? this.promptKey : null);
   }
 
-  _speak(text) {
+  _speak(text, forPrompt = null) {
     if (this.leaving) return;
     if (this.playing) this._stopTts();
     this.counter += 1;
-    this.playing = { id: `v${this.counter}`, text, chunks: new Map(), current: null, startedAt: this.now(), ack: false, unfiltered: !this.echoCancelled };
+    this.playing = { id: `v${this.counter}`, text, chunks: new Map(), current: null, startedAt: this.now(), ack: false, unfiltered: !this.echoCancelled, forPrompt };
     this.interrupted = null;
     this.emit('speak', { id: this.playing.id, text });
   }
@@ -594,13 +614,14 @@ class VoiceConversation extends EventEmitter {
     this.streamOpen = true;
   }
 
-  streamSentence(sentence) {
+  // msg: the message of Claude's the sentence belongs to (-1: the rest of one already cut).
+  streamSentence(sentence, msg = this.msgSeq) {
     const text = String(sentence || '').replace(/\s+/g, ' ').trim();
     if (!text || this.leaving) return;
     // A new stream never cuts what Claude is still saying (an earlier message, the previous turn's end).
     if (!this.msgWaiting && !this.streamCut && this._busyVoice() && this.playing.id !== this.streamId) this.msgWaiting = true;
     // A message that waits for the user (or comes after one that does) keeps its place in line.
-    if (this.msgWaiting || this.heldStream.length) { this.heldStream.push({ text, msg: this.msgSeq }); this._watchPending(); return; }
+    if (this.msgWaiting || this.heldStream.length) { this.heldStream.push({ text, msg }); this._watchPending(); return; }
     if (this.streamCut) {
       // Kept for "sigue", never dropped (also when nothing of this turn was playing when it was cut).
       if (this.interrupted) this.interrupted.text = `${this.interrupted.text} ${text}`.trim();
@@ -625,6 +646,8 @@ class VoiceConversation extends EventEmitter {
       const p = this.playing;
       this.audioWait = this.setTimer(() => { this.audioWait = null; if (this.playing === p && !p.idle) this.tts({ type: 'idle', id: p.id }); }, AUDIO_WAIT_MS);
     }
+    const marks = this.playing.msgStarts || (this.playing.msgStarts = []);
+    if (!marks.length || marks.at(-1).msg !== msg) marks.push({ msg, at: this.playing.text ? this.playing.text.length + 1 : 0 });
     this.playing.text = `${this.playing.text} ${text}`.trim();
     this.emit('speak-stream', { id: this.playing.id, action: 'append', text });
   }
@@ -662,7 +685,7 @@ class VoiceConversation extends EventEmitter {
     this.pendingSpeak = null;
     this.pendingFor = null;
     if (!text) return;
-    this._speak(text);
+    this._speak(text, question && this._asking() ? this.promptKey : null);
     if (question && this.playing) this.askedAt = this.now(); // from now on the user is answering it
   }
 
@@ -728,9 +751,12 @@ class VoiceConversation extends EventEmitter {
   // phone would just go on, so Claude picks up again from the sentence it was cut in.
   _resumeAfterNoise() {
     const cut = this.noiseCut;
+    if (!cut) return;
+    // Something of the user's is still coming (a phrase, a transcript): decided when it arrives.
+    if (!this._userQuiet() && !this.leaving) { this._watchPending(); return; }
     this.noiseCut = null;
     // Anything that happened since (new words, a new message, "sigue") wins over resuming.
-    if (!cut || this.interrupted !== cut.interrupted || this.speaking() || this.userSpeaking || this._draftText()) return;
+    if (this.interrupted !== cut.interrupted || this.speaking() || this.userSpeaking || this._draftText()) return;
     const rest = this._remainder(this.interrupted);
     this.interrupted = null;
     if (!rest) return;
@@ -797,12 +823,16 @@ class VoiceConversation extends EventEmitter {
     const heard = contentWords(text);
     if (!heard.length) return Boolean(audible);
     const spoken = new Set(contentWords(said));
-    return heard.filter(w => spoken.has(w)).length / heard.length >= 0.6;
+    const ratio = heard.filter(w => spoken.has(w)).length / heard.length;
+    return span ? heard.length >= 3 && ratio >= 0.9 : ratio >= 0.6;
   }
 
   // Text from the sentence that was playing when the user cut in, to the end of the message.
   _remainder(utt) {
-    if (!utt) return '';
+    return utt ? utt.text.slice(this._remainderAt(utt)).trim() : '';
+  }
+
+  _remainderAt(utt) {
     const cut = utt.chunks.get(utt.current);
     let at = cut ? utt.text.indexOf(cut) : -1;
     if (cut && at < 0) {
@@ -816,13 +846,13 @@ class VoiceConversation extends EventEmitter {
         at = n < words.length ? words[n].index : -1;
       }
     }
-    return (at >= 0 ? utt.text.slice(at) : utt.text).trim();
+    return at >= 0 ? at : 0;
   }
 
   _localIntent(text) {
     const t = fold(text);
     // "Sí, adelante" to a permission or a question is its answer, even if it cut the question short.
-    const deciding = this.turn === 'awaitingUser' && (this.kind === 'permission' || this.kind === 'ask');
+    const deciding = this.turn === 'awaitingUser' && (this.kind === 'permission' || this.kind === 'ask') && this._heardPrompt();
     const kept = this.holding && (this.heldStream.length > 0 || this.msgWaiting); // only after an "espera" hold
     if (RESUME.test(t) && (this.interrupted || kept) && !deciding) {
       const cut = this.interrupted;
@@ -854,7 +884,7 @@ class VoiceConversation extends EventEmitter {
     if (this.msgWaiting || this.heldStream.length) { this.heldStream.unshift({ text, msg: -1 }); this._watchPending(); return; }
     if (streaming && this.streamOpen) {
       if (this.playing && this.playing.id !== this.streamId) this._stopTts();
-      this.streamSentence(text);
+      this.streamSentence(text, -1);
     } else this._speak(text);
   }
 
@@ -882,7 +912,11 @@ class VoiceConversation extends EventEmitter {
   }
 
   _onDeadline() {
-    if (this.speaking() && !this.playing.ack) { this.deferredCommit = true; this._debug('fin de turno aplazado: Claude habla'); return; } // never answer while Claude is still talking
+    if (this.speaking() && !this.playing.ack) {
+      // Never answer while Claude is still talking, unless the user is stopping it ("no, para…").
+      if (classifyUrgency(this._draftText()) !== 'interrupt') { this.deferredCommit = true; this._debug('fin de turno aplazado: Claude habla'); return; }
+      this._bargeIn('final');
+    }
     const spoken = this.policy ? this.policy.take() : '';
     const text = [this.prefix, spoken].filter(Boolean).join(' ').trim();
     if (!text) return this._ui();
@@ -924,8 +958,8 @@ class VoiceConversation extends EventEmitter {
     this.lastCut = null;  // the words that cut Claude were sent: the cut stands
     // Words begun before a question or permission reached the user were not said to it: they go to Claude
     // as something to take into account, and the question is still waiting for its answer.
-    const early = unheard || (source === 'voice' && this.turn === 'awaitingUser' && (this.kind === 'permission' || this.kind === 'ask')
-      && (this.askedAt == null || (this.draftStartAt != null && this.draftStartAt < this.askedAt)));
+    // (For a result, the reply still goes to Claude, which is told the user had not heard it.)
+    const early = unheard || (source === 'voice' && this.turn === 'awaitingUser' && !this._heardPrompt());
     const route = this.turn === 'awaitingUser' && !early ? 'answer' : 'steer';
     const commit = {
       callId: this.call?.id || null,

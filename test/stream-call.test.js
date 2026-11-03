@@ -787,3 +787,25 @@ test('En espera with sentences of two messages held: the finished one is not los
   await tick();
   assert.deepEqual(spoken, ['Primero miro la base de datos. Hay dos tablas rotas.', 'Arreglo la primera. Luego la segunda.']);
 });
+
+test('a kept question is asked again after what Claude said before it (round 5 #7)', async () => {
+  const { broker, ctl, session } = setup();
+  const call = await ctl.start({ cwd: 'C:/work/app' });
+  session.emit('permission', { requestId: 'p1', toolName: 'Bash', input: { command: 'npm run migrate' } });
+  broker.hold(call.id);
+  ctl.unheard(call.id, 'He preparado la migración: borra la tabla de usuarios.', { question: true });
+  const asked = broker.calls.get(call.id).messages.at(-1);
+  assert.equal(asked.rev, 1);
+  assert.match(asked.speech, /^He preparado la migración: borra la tabla de usuarios\. /);
+  ctl.unheard(call.id, '', { question: true });
+  assert.ok(!/He preparado la migración.*He preparado/.test(asked.speech), 'never prepended twice');
+});
+
+test('every published message has its own id (round 5 #1)', () => {
+  const broker = new CallBroker({ defaultMode: 'off', now: () => 5 });
+  const call = broker.openStreamCall({ sessionId: 'i1', cwd: 'C:/a' });
+  broker.addCallMessage(call.id, { role: 'assistant', text: 'Uno.' });
+  broker.addCallMessage(call.id, { role: 'assistant', text: 'Dos.' });
+  const ids = broker.getSnapshot().calls[0].messages.map(m => m.id);
+  assert.equal(new Set(ids).size, ids.length);
+});

@@ -141,6 +141,7 @@ class CallBroker extends EventEmitter {
     this.sessionModes = new Map();
     // Sessions AgentCall drives itself (controlled calls): their own plugin hooks never make calls,
     // whatever /saul says for that session; only the controller's prompts (hint 'on') do.
+    this.messageSeq = 0;
     this.driven = new Map(); // sessionId → how many AgentCall processes drive it (one closing, one resumed)
   }
 
@@ -1061,8 +1062,15 @@ class CallBroker extends EventEmitter {
       currentQuestion: call.interactionKind === 'ask' && call.responder && !call.resolved
         ? (({ question, header, multiSelect, options }) => ({ question, header, multiSelect: Boolean(multiSelect), options: (options || []).map(o => ({ label: o.label, description: o.description || '' })) }))(call.questions[call.questionIndex] || {})
         : null,
-      messages: call.messages || [],
+      messages: this._messagesWithIds(call),
     };
+  }
+
+  // Every message gets an id the first time it is published: two messages can share a millisecond.
+  _messagesWithIds(call) {
+    const messages = call.messages || [];
+    for (const m of messages) if (m.id == null) m.id = ++this.messageSeq;
+    return messages;
   }
 
   _clearRingTimer(id) {
